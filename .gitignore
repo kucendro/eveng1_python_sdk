@@ -1,0 +1,7 @@
+__pycache__/
+build/
+dist/
+venv/
+*.log
+g1_config.json
+g1_connector.log
