@@ -2,13 +2,13 @@
 G1 Services module - Service-specific implementations
 """
 
-from .uart import UARTService
-from .audio import AudioService
-from .display import DisplayService
-from .events import EventService
-from .status import StatusManager
-from .state import StateManager
-from .device import DeviceManager
+from services.uart import UARTService
+from services.audio import AudioService
+from services.display import DisplayService
+from services.events import EventService
+from services.status import StatusManager
+from services.state import StateManager
+from services.device import DeviceManager
 
 __all__ = [
     'UARTService',

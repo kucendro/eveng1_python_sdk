@@ -2,7 +2,8 @@
 import asyncio
 from rich.table import Table
 from rich.live import Live
-from ..utils.constants import StateEvent
+
+from utils.constants import StateEvent
 
 class StatusManager:
     """Manages status display and dashboard"""

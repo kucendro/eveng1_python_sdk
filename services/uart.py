@@ -4,7 +4,7 @@ UART service implementation for G1 glasses
 import asyncio
 from typing import Optional, Callable, Dict, Any
 from bleak import BleakClient
-from ..utils.constants import UUIDS, COMMANDS, NOTIFICATIONS
+from utils.constants import UUIDS, COMMANDS, NOTIFICATIONS
 import time
 
 class UARTService:

@@ -11,14 +11,14 @@ import asyncio
 from dataclasses import dataclass
 from typing import Optional
 
-from .bluetooth import BLEManager
-from .pairing import PairingManager
-from .commands import CommandManager
-from ..services.state import StateManager
-from ..services.uart import UARTService
-from ..utils.logger import setup_logger
-from ..utils.config import Config
-from ..utils.constants import UUIDS, COMMANDS, StateEvent
+from connector.bluetooth import BLEManager
+from connector.pairing import PairingManager
+from connector.commands import CommandManager
+from services.state import StateManager
+from services.uart import UARTService
+from utils.logger import setup_logger
+from utils.config import Config
+from utils.constants import UUIDS, COMMANDS, StateEvent
 
 @dataclass
 class G1Config:

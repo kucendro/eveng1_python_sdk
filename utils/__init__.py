@@ -2,8 +2,17 @@
 G1 Utils module - Utility functions and shared resources
 """
 
-from .constants import UUIDS, COMMANDS, NOTIFICATIONS, StateEvent, ConnectionState
-from .logger import setup_logger
-from .config import Config
+from utils.constants import UUIDS, COMMANDS, NOTIFICATIONS, StateEvent, ConnectionState
+from utils.logger import setup_logger, user_guidance
+from utils.config import Config
 
-__all__ = ['UUIDS', 'COMMANDS', 'STATES', 'setup_logger', 'Config'] 
+__all__ = [
+    'UUIDS',
+    'COMMANDS',
+    'NOTIFICATIONS',
+    'StateEvent',
+    'ConnectionState',
+    'setup_logger',
+    'user_guidance',
+    'Config'
+] 

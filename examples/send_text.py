@@ -58,8 +58,8 @@ Description: The actual data being transmitted in this package.
 """
 
 import asyncio
-from g1sdk.connector import G1Connector
-from g1sdk.services import DisplayService
+from connector import G1Connector
+from services import DisplayService
 
 async def main():
     """

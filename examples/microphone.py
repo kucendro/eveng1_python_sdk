@@ -43,8 +43,8 @@ Description: This command transmits a chunk of audio data from the glasses' MIC,
 """
 
 import asyncio
-from g1sdk.connector import G1Connector
-from g1sdk.services import AudioService
+from connector import G1Connector
+from services import AudioService
 
 async def main():
     """

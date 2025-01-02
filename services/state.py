@@ -3,7 +3,10 @@ State management for G1 glasses
 """
 from enum import Enum, IntEnum
 import asyncio
-from ..utils.constants import StateEvent, ConnectionState, NOTIFICATIONS
+from typing import Optional
+
+from utils.constants import StateEvent, ConnectionState, NOTIFICATIONS
+from utils.logger import user_guidance
 
 class StateManager:
     """Manages state for G1 glasses"""

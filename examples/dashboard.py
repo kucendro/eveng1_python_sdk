@@ -8,8 +8,8 @@ from rich.panel import Panel
 from rich.logging import RichHandler
 from collections import deque
 import logging
-from g1sdk.connector import G1Connector
-from g1sdk.services.state import ConnectionState
+from connector import G1Connector
+from services.state import ConnectionState
 import time
 from rich.box import ROUNDED
 

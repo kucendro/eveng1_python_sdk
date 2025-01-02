@@ -41,8 +41,8 @@ crc: The crc check value calculated using Crc32Xz big endian, combined with the 
 """
 
 import asyncio
-from g1sdk.connector import G1Connector
-from g1sdk.services import DisplayService
+from connector import G1Connector
+from services import DisplayService
 
 async def main():
     """

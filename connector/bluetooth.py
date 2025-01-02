@@ -4,11 +4,12 @@ Bluetooth specific functionality for G1 glasses
 import asyncio
 import time
 from bleak import BleakClient, BleakScanner
-from ..utils.constants import UUIDS, COMMANDS, StateEvent
 from typing import Optional
-from ..utils.logger import user_guidance
 from rich.table import Table
-from .pairing import PairingManager
+
+from utils.constants import UUIDS, COMMANDS, StateEvent
+from utils.logger import user_guidance
+from connector.pairing import PairingManager
 
 class BLEManager:
     """Manages BLE connections for G1 glasses"""

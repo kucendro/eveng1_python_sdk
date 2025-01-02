@@ -2,8 +2,8 @@
 import asyncio
 import logging
 from datetime import datetime
-from g1sdk.connector import G1Connector
-from g1sdk.utils.constants import StateEvent
+from connector.base import G1Connector
+from utils.constants import StateEvent
 
 class InteractionLogger:
     def __init__(self):

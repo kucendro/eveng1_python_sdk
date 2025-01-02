@@ -5,7 +5,7 @@ import asyncio
 import time
 from typing import Dict, Any
 from bleak import BleakClient
-from ..utils.constants import UUIDS, COMMANDS
+from utils.constants import UUIDS, COMMANDS
 
 class CommandManager:
     """Manages command queuing and execution"""

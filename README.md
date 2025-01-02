@@ -21,7 +21,7 @@ Required packages:
 
 Basic connection example:
 ```python
-from g1sdk.connector import G1Connector
+from connector import G1Connector
 import asyncio
 
 async def main():
@@ -118,7 +118,7 @@ Supporting utilities:
 
 ### First Time Setup
 1. **Config Initialization**
-   - `g1sdk/utils/config.py`: Creates default configuration if none exists
+   - `utils/config.py`: Creates default configuration if none exists
    - Default settings loaded from `g1_config.json`:
      ```json
      {
@@ -129,24 +129,24 @@ Supporting utilities:
      ```
 
 2. **Logging Setup**
-   - `g1sdk/utils/logger.py`: Configures logging handlers
+   - `utils/logger.py`: Configures logging handlers
    - Creates log directory if not exists
    - Initializes both file and console logging
    - Log files stored in `./g1_connector.log`
 
 3. **Bluetooth Discovery**
-   - `g1sdk/connector/bluetooth.py`: `BLEManager.scan_for_glasses()`
+   - `connector/bluetooth.py`: `BLEManager.scan_for_glasses()`
    - Searches for devices matching G1 identifier
    - Returns list of discovered G1 glasses with addresses
 
 4. **Pairing Process**
-   - `g1sdk/connector/pairing.py`: Handles initial device pairing
+   - `connector/pairing.py`: Handles initial device pairing
    - Establishes secure connection with both left and right glasses
    - Validates device authenticity
    - Stores pairing information
 
 5. **Connection Confirmation**
-   - `g1sdk/connector/bluetooth.py`: `_connect_glass()`
+   - `connector/bluetooth.py`: `_connect_glass()`
    - Verifies successful connection to both glasses
    - Initializes UART service
    - Sets up notification handlers
@@ -159,7 +159,7 @@ Supporting utilities:
 ### Subsequent Connections
 1. **Direct Connection**
    - Reads stored glass IDs from config
-   - `g1sdk/connector/bluetooth.py`: Attempts direct connection
+   - `connector/bluetooth.py`: Attempts direct connection
    - Uses configured retry logic:
      ```python
      for attempt in range(self.connector.config.reconnect_attempts):
@@ -167,15 +167,15 @@ Supporting utilities:
      ```
 
 2. **Connection Maintenance**
-   - `g1sdk/connector/commands.py`: Sends periodic heartbeat
+   - `connector/commands.py`: Sends periodic heartbeat
    - Default heartbeat command: `HEARTBEAT_CMD = bytes([0x25, 0x06, 0x00, 0x01, 0x04, 0x01])`
    - Monitors connection status
    - Automatic reconnection on disconnect
 
 3. **Event Monitoring**
-   - `g1sdk/services/state.py`: Manages state tracking
-   - `g1sdk/services/uart.py`: Handles UART notifications
-   - Event types defined in `g1sdk/utils/constants.py`:
+   - `services/state.py`: Manages state tracking
+   - `services/uart.py`: Handles UART notifications
+   - Event types defined in `utils/constants.py`:
      - Physical states (wearing, charging)
      - Device states (connected, operational)
      - Interactions (taps, gestures)
