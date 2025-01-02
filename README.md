@@ -225,3 +225,11 @@ Default settings can be modified in `g1_config.json`:
 - `log_to_console`: Enable or disable logging to the console
 - `log_to_file`: Enable or disable logging to a file
 - `log_to_db`: Enable or disable logging to a database (TODO)
+
+
+
+
+## Notes for improvements
+When we exit, windows BT manager maintains a connection for a while blocking a new connection, can we hook into an existing connection if it is still active?
+if not, and in the case of any other errors at the start, try to connect again after a couple of seconds, then after a few more seconds (as per config)
+or can we force windows BT manager to disconnect when we exit?

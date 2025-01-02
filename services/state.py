@@ -98,28 +98,25 @@ class StateManager:
             return
             
         try:
-            # Notify raw callbacks first
-            for callback in self._raw_state_callbacks:
-                try:
-                    await callback(new_state, new_state in StateEvent.PHYSICAL_STATES, side)
-                except Exception as e:
-                    self.logger.error(f"Error in raw state callback: {e}")
+            # If we have raw callbacks, only call those and skip all other logging
+            if self._raw_state_callbacks:
+                for callback in self._raw_state_callbacks:
+                    try:
+                        await callback(new_state, new_state in StateEvent.PHYSICAL_STATES, side)
+                    except Exception as e:
+                        self.logger.error(f"Error in raw state callback: {e}")
+                return  # Exit early to skip all other processing
 
+            # Normal state change handling when no raw callbacks
             self.logger.debug(f"Raw state received: 0x{new_state:02x} ({new_state}) from {side} glass")
             
-            # Check if it's a physical state
             if new_state in StateEvent.PHYSICAL_STATES:
-                system_name, display_label = StateEvent.get_physical_state(new_state)
-                self._physical_state = new_state
-                self._last_known_state = new_state
-                
+                _, display_label = StateEvent.get_physical_state(new_state)
                 if not self._dashboard_mode:
                     self.logger.info(f"Physical state changed to: {display_label} (0x{new_state:02x}) from {side} glass")
             
-            # Check if it's a device state
             elif new_state in StateEvent.DEVICE_STATES:
-                system_name, display_label = StateEvent.get_device_state(new_state)
-                # Update relevant state if needed
+                _, display_label = StateEvent.get_device_state(new_state)
                 if not self._dashboard_mode:
                     self.logger.info(f"Device state changed to: {display_label} (0x{new_state:02x}) from {side} glass")
             

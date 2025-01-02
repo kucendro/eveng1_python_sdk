@@ -76,17 +76,23 @@ class StateEvent:
         0x06: ("WEARING", "Wearing"),
         0x07: ("TRANSITIONING", "Transitioning"),
         0x08: ("CRADLE", "In the cradle")
+        
     }
     
     # Device States, including connectivity - (code, system_name, display_label)
     DEVICE_STATES: Dict[int, Tuple[str, str]] = {
-        0x11: ("CONNECTED", "Successfully connected"),
-        0x09: ("SUBSCRIBED", "Subscribed to events"),
-        0x0f: ("OPERATIONAL", "Operational"),
+        0x09: ("DEVICE_UNKNOWN_09", "Device unknown 09"),
+        0x0a: ("DEVICE_UNKNOWN_0a", "Device unknown 0a"), # this one started appearing after the firmware update on 2025-01-02 (left and right)
+        0x0f: ("DEVICE_UNKNOWN_0F", "Device unknown 0f"), # seen at regular intervals while device was connect out and in cradle over 8 hours
+        0x11: ("CONNECTED", "Successfully connected"), # assumed because its usualy at the start of the connection
+        0x12: ("DEVICE_UNKNOWN_12", "Device unknown 12"), # seen, unclear purpose
+        0x14: ("DEVICE_UNKNOWN_15", "Device unknown 14"), # seen, unclear purpose
+        0x15: ("DEVICE_UNKNOWN_16", "Device unknown 15") # seen, unclear purpose
     }
 
     # Battery States - (code, system_name, display_label)
     BATTERY_STATES: Dict[int, Tuple[str, str]] = {
+        0x09: ("BATTERY_CHARGED", "Battery fully charged"),
         0x0e: ("BATTERY_CHARGING", "Battery charging?"),
     }
     
@@ -105,15 +111,11 @@ class StateEvent:
 
     # Unknown or unused events - (code, system_name, display_label)
     UNKNOWN: Dict[int, Tuple[str, str]] = {
-        0x0a: ("UNKNOWN0A", "Unknown (0x0a)"),
         0x0b: ("UNKNOWN0B", "Unknown (0x0b)"),
         0x0c: ("UNKNOWN0C", "Unknown (0x0c)"),
         0x0d: ("UNKNOWN0D", "Unknown (0x0d)"),
         0x10: ("UNKNOWN10", "Unknown (0x10)"),
-        0x12: ("UNKNOWN12", "Unknown (0x12)"), # seen, unclear purpose
         0x13: ("UNKNOWN13", "Unknown (0x13)"),
-        0x14: ("UNKNOWN14", "Unknown (0x14)"), # seen, unclear purpose
-        0x15: ("UNKNOWN15", "Unknown (0x15)"), # seen, unclear purpose
         0x16: ("UNKNOWN16", "Unknown (0x16)"),
         0x18: ("UNKNOWN18", "Unknown (0x18)"),
         0x19: ("UNKNOWN19", "Unknown (0x19)"),

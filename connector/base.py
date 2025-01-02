@@ -78,6 +78,13 @@ class G1Connector:
             # Only set state once at the beginning
             self.state_manager.connection_state = "Connecting..."
             
+            # Check if we need to do initial scanning
+            if not self.config.left_address or not self.config.right_address:
+                self.logger.info("No saved glasses found. Starting initial scan...")
+                if not await self.ble_manager.scan_for_glasses():
+                    self.state_manager.connection_state = "Disconnected"
+                    return False
+            
             # Attempt connection
             if not await self.ble_manager.connect_to_glasses():
                 self.state_manager.connection_state = "Disconnected"

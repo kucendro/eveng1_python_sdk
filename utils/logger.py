@@ -6,18 +6,31 @@ import os
 import logging
 import traceback
 from rich.console import Console
+from typing import Optional
 
-def setup_logger(config):
+# Global console instance
+_console: Optional[Console] = None
+
+def get_console() -> Console:
+    """Get or create global console instance"""
+    global _console
+    if _console is None:
+        _console = Console()
+    return _console
+
+def setup_logger(config, name: str = "G1Connector"):
     """Configure logging for the SDK"""
-    logger = logging.getLogger("G1Connector")
+    logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     
     # Clear existing handlers
-    logger.handlers = []
+    logger.handlers.clear()
+    
+    # Prevent propagation to root logger
+    logger.propagate = False
     
     # Create formatters with file/line information
     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s')
-    console_formatter = logging.Formatter('%(message)s')
     
     # File handler - logs everything
     if config.log_file:
@@ -29,7 +42,7 @@ def setup_logger(config):
         logger.addHandler(file_handler)
     
     if config.console_log:
-        console = Console()
+        console = get_console()
         
         def console_handler(record):
             try:
@@ -81,7 +94,7 @@ def setup_logger(config):
 
 def user_guidance(logger, message: str):
     """Display formatted message to user and log it"""
-    console = Console()
+    console = get_console()
     console.print(message)
     # Strip rich formatting for log file
     plain_message = message.replace("[yellow]", "").replace("[/yellow]", "")
