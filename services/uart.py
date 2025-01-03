@@ -63,6 +63,7 @@ class UARTService:
             elif notification_type == NOTIFICATIONS.MIC_DATA:
                 self.logger.debug(f"Microphone data received from {side}")
             elif notification_type == NOTIFICATIONS.HEARTBEAT_RESPONSE:
+                self.connector.state_manager._last_heartbeat = time.time()
                 self.logger.debug(f"Heartbeat response from {side}")
             elif notification_type == NOTIFICATIONS.COMMAND_RESPONSE:
                 self.logger.debug(f"Command success response from {side}")

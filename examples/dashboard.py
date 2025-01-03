@@ -12,6 +12,7 @@ from connector import G1Connector
 from services.state import ConnectionState
 import time
 from rich.box import ROUNDED
+from utils.constants import StateEvent
 
 class LogPanel:
     """Panel to display recent log messages"""
@@ -124,57 +125,77 @@ def create_status_table(glasses: G1Connector) -> Table:
     try:
         table = Table(box=ROUNDED)
         
-        # Add column headers
-        table.add_column("Item", style="cyan")
-        table.add_column("Status", style="white")
+        # Add column headers with consistent styling
+        table.add_column("[bold cyan]Item", style="cyan")
+        table.add_column("[bold cyan]Status", style="white")
         
-        # Connection status
-        left_status = "[green]Connected[/green]" if glasses.left_client and glasses.left_client.is_connected else "[red]Disconnected[/red]"
-        right_status = "[green]Connected[/green]" if glasses.right_client and glasses.right_client.is_connected else "[red]Disconnected[/red]"
+        # Connection status with more detail
+        left_name = glasses.config.left_name or "Unknown"
+        right_name = glasses.config.right_name or "Unknown"
+        left_status = f"[green]Connected ({left_name})[/green]" if glasses.left_client and glasses.left_client.is_connected else "[red]Disconnected[/red]"
+        right_status = f"[green]Connected ({right_name})[/green]" if glasses.right_client and glasses.right_client.is_connected else "[red]Disconnected[/red]"
         table.add_row("Left Glass", left_status)
         table.add_row("Right Glass", right_status)
         
-        # Physical state
+        # Physical state with last known state
         state = glasses.state_manager.physical_state
+        last_state = glasses.state_manager._last_known_state or "None"
         state_colors = {
             "Wearing": "green",
             "Transitioning": "yellow",
             "In the cradle": "blue",
-            "Unknown": "white"
+            "None": "white"
         }
-        color = state_colors.get(state, "white")
-        table.add_row("State", f"[{color}]{state}[/{color}]")
+        color = state_colors.get(last_state, "yellow")
+        table.add_row("State", f"[{color}]{last_state}[/{color}]")
         
         # Battery state
         battery = glasses.state_manager.battery_state
         battery_colors = {
-            "Battery full": "bright_green",
-            "Battery Charging": "yellow",
-            "Unknown": "white"
+            "Battery fully charged": "bright_green",
+            "Battery charging?": "yellow",
+            "Unknown": "yellow"
         }
-        color = battery_colors.get(battery, "white")
+        color = battery_colors.get(battery, "yellow")
         table.add_row("Battery", f"[{color}]{battery}[/{color}]")
         
         # Last heartbeat
-        last_hb = time.time() - glasses.command_manager.last_heartbeat if glasses.command_manager.last_heartbeat else None
-        if last_hb is not None:
-            color = "green" if last_hb < 10 else "yellow" if last_hb < 20 else "red"
-            table.add_row("Last Heartbeat", f"[{color}]{last_hb:.1f}s ago[/{color}]")
+        last_heartbeat = getattr(glasses.state_manager, '_last_heartbeat', None)
+        if last_heartbeat:
+            time_since = time.time() - last_heartbeat
+            heartbeat_status = f"{time_since:.1f}s ago"
+            color = "green" if time_since < 5 else "yellow"
         else:
-            table.add_row("Last Heartbeat", "[white]Unknown[/white]")
+            heartbeat_status = "None"
+            color = "white"
+        table.add_row("Last Heartbeat", f"[{color}]{heartbeat_status}[/{color}]")
         
-        # Silent mode
+        # Last interaction
+        interaction = glasses.state_manager.last_interaction
+        interaction_time = getattr(glasses.state_manager, '_last_interaction_time', None)
+        if interaction and interaction != "None" and interaction_time:
+            time_since = time.time() - interaction_time
+            interaction_status = f"{interaction} ({time_since:.1f}s ago)"
+            table.add_row("Last Interaction", f"[cyan]{interaction_status}[/cyan]")
+        else:
+            table.add_row("Last Interaction", "[white]None[/white]")
+        
+        # Last device state
+        last_device_state = glasses.state_manager._last_device_state
+        last_device_time = glasses.state_manager._last_device_state_time
+        if last_device_state and last_device_time:
+            time_since = time.time() - last_device_time
+            label = glasses.state_manager.last_device_state_label
+            device_status = f"{label} ({time_since:.1f}s ago)"
+            table.add_row("Last Device State", f"[yellow]{device_status}[/yellow]")
+        else:
+            table.add_row("Last Device State", "[white]None[/white]")
+        
+        # Silent mode status
         silent_mode = glasses.state_manager.silent_mode
         color = "yellow" if silent_mode else "green"
         status = "On" if silent_mode else "Off"
         table.add_row("Silent Mode", f"[{color}]{status}[/{color}]")
-        
-        # Last interaction
-        interaction = glasses.state_manager.last_interaction
-        if interaction and interaction != "None":
-            table.add_row("Last Interaction", f"[cyan]{interaction}[/cyan]")
-        else:
-            table.add_row("Last Interaction", "[white]None[/white]")
         
         return table
     except Exception as e:
@@ -193,45 +214,45 @@ async def main():
         console.clear()
         glasses.state_manager.set_dashboard_mode(True)
         
-        # Remove the console.print and let the logger handle it
         success = await glasses.connect()
         
         if not success:
             console.print("[red]Failed to connect to glasses[/red]")
             return
             
-        # Show success briefly before dashboard
         console.print("[green]Connected successfully[/green]")
         await asyncio.sleep(1)
         console.clear()
         
-        # Add our log handler only after connection
         glasses.logger.addHandler(log_panel.handler)
         
-        # Create live display with both status and logs
         with Live(create_layout(glasses, log_panel), console=console, refresh_per_second=4) as live:
-            while True:
-                try:
+            try:
+                while True:
                     live.update(create_layout(glasses, log_panel))
                     await asyncio.sleep(0.25)
-                except Exception as e:
-                    glasses.logger.error(f"Error updating display: {e}", exc_info=True)
-                    await asyncio.sleep(1)
+            except KeyboardInterrupt:
+                # Handle the interrupt gracefully
+                live.stop()
+                console.clear()
+                console.print("[yellow]Shutting down...[/yellow]")
                     
     except KeyboardInterrupt:
-        glasses.state_manager.shutdown()
-        glasses.logger.info("Dashboard exited")
+        console.print("[yellow]Shutting down...[/yellow]")
     except Exception as e:
         glasses.logger.error(f"Dashboard error: {e}", exc_info=True)
     finally:
-        # Remove our custom handler
+        # Ensure clean shutdown
         glasses.logger.removeHandler(log_panel.handler)
         glasses.state_manager.set_dashboard_mode(False)
+        glasses.state_manager.shutdown()
         await glasses.disconnect()
-        glasses.logger.info("Dashboard exited")
+        console.print("[green]Dashboard exited[/green]")
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
-        print("\nExited by user") 
+        print("\nExited by user")
+    except Exception as e:
+        print(f"\nError: {e}") 

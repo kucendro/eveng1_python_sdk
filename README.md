@@ -233,3 +233,8 @@ Default settings can be modified in `g1_config.json`:
 When we exit, windows BT manager maintains a connection for a while blocking a new connection, can we hook into an existing connection if it is still active?
 if not, and in the case of any other errors at the start, try to connect again after a couple of seconds, then after a few more seconds (as per config)
 or can we force windows BT manager to disconnect when we exit?
+
+when the g1 is paired with the phone then the sdk running on pc struggled to connect with it. closing the mobile app and disabling bluetooth on the phone doesnt seem to help.
+only removing the G1 device (L and R) from windows BT manager seems to help, running the sdk again will then redo the paiting step and establish a connection. but this DOES NOT force the pairing.
+only removing the device AND deleting the config file seems to force the pairing and create a proper connection (heartbeat and events dont work when not paired).
+can we detect if the devices are paired and, if not, force the pairing again and create a proper connection? 

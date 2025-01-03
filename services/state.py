@@ -4,6 +4,7 @@ State management for G1 glasses
 from enum import Enum, IntEnum
 import asyncio
 from typing import Optional
+import time
 
 from utils.constants import StateEvent, ConnectionState, NOTIFICATIONS
 from utils.logger import user_guidance
@@ -17,7 +18,7 @@ class StateManager:
         self._physical_state = None
         self._battery_state = None  # Add explicit battery state tracking
         self._connection_state = ConnectionState.DISCONNECTED
-        self._last_interaction = None
+        self._last_interaction = None  # This will store the raw code
         self._last_interaction_side = None
         self._state_callbacks = []
         self._raw_state_callbacks = []
@@ -26,6 +27,12 @@ class StateManager:
         self._last_known_state = None
         self._silent_mode = False
         self._shutting_down = False
+        self._last_heartbeat = None
+        self._last_device_state = None
+        self._last_device_state_time = None
+        self._last_interaction_time = None
+        self._ai_enabled = False  # Track AI state
+        self._last_device_state_label = None  # Store custom state labels
 
     def shutdown(self):
         """Mark manager as shutting down"""
@@ -87,10 +94,16 @@ class StateManager:
         """Get last interaction display label with side if applicable"""
         if self._last_interaction is None:
             return "None"
-        _, label = StateEvent.get_interaction(self._last_interaction)
-        if self._last_interaction_side:
-            return f"{label} ({self._last_interaction_side})"
-        return label
+            
+        try:
+            _, label = StateEvent.get_interaction(self._last_interaction)
+            # Only show side for non-dashboard interactions
+            if self._last_interaction_side and not any(x in label.lower() for x in ["dashboard", "ai"]):
+                return f"{label} ({self._last_interaction_side})"
+            return label
+        except Exception as e:
+            self.logger.error(f"Error getting interaction label: {e}")
+            return "Error"
 
     async def handle_state_change(self, new_state: int, side: str = None):
         """Handle state change from glasses"""
@@ -98,6 +111,49 @@ class StateManager:
             return
             
         try:
+            # A state can belong to multiple categories, so check all
+            
+            # Physical state check
+            if new_state in StateEvent.PHYSICAL_STATES:
+                self._last_known_state = StateEvent.get_physical_state(new_state)[1]
+                
+            # Battery state check
+            if new_state in StateEvent.BATTERY_STATES:
+                self._battery_state = new_state
+                
+            # Device state check
+            if new_state in StateEvent.DEVICE_STATES:
+                self._last_device_state = new_state
+                self._last_device_state_time = time.time()
+                self._last_device_state_label = None  # Reset custom label for actual device states
+                
+            # Interaction check and special handling for silent mode
+            if new_state in StateEvent.INTERACTIONS:
+                self._last_interaction = new_state
+                self._last_interaction_side = side
+                self._last_interaction_time = time.time()
+                
+                # Update AI state based on left side interactions
+                if side == "left":
+                    if new_state == 0x17:  # LONG_PRESS
+                        self._ai_enabled = True
+                        # Update device state to reflect AI mode
+                        self._last_device_state = new_state
+                        self._last_device_state_time = time.time()
+                        self._last_device_state_label = "Even AI enabled (Inferred)"
+                    elif new_state == 0x00:  # DOUBLE_TAP
+                        self._ai_enabled = False
+                        # Update device state to reflect AI disabled
+                        self._last_device_state = new_state
+                        self._last_device_state_time = time.time()
+                        self._last_device_state_label = "Even AI disabled (Inferred)"
+                
+                # Handle silent mode
+                if new_state == 0x04:  # SILENT_MODE_ON
+                    self._silent_mode = True
+                elif new_state == 0x05:  # SILENT_MODE_OFF
+                    self._silent_mode = False
+                
             # If we have raw callbacks, only call those and skip all other logging
             if self._raw_state_callbacks:
                 for callback in self._raw_state_callbacks:
@@ -110,35 +166,34 @@ class StateManager:
             # Normal state change handling when no raw callbacks
             self.logger.debug(f"Raw state received: 0x{new_state:02x} ({new_state}) from {side} glass")
             
+            # Log appropriate messages based on state type(s)
             if new_state in StateEvent.PHYSICAL_STATES:
                 _, display_label = StateEvent.get_physical_state(new_state)
                 if not self._dashboard_mode:
                     self.logger.info(f"Physical state changed to: {display_label} (0x{new_state:02x}) from {side} glass")
             
-            elif new_state in StateEvent.DEVICE_STATES:
+            if new_state in StateEvent.DEVICE_STATES:
                 _, display_label = StateEvent.get_device_state(new_state)
                 if not self._dashboard_mode:
                     self.logger.info(f"Device state changed to: {display_label} (0x{new_state:02x}) from {side} glass")
             
-            # Check if it's a battery state
-            elif new_state in StateEvent.BATTERY_STATES:
-                system_name, display_label = StateEvent.get_battery_state(new_state)
-                self._battery_state = new_state
-                
+            if new_state in StateEvent.BATTERY_STATES:
+                _, display_label = StateEvent.get_battery_state(new_state)
                 if not self._dashboard_mode:
                     self.logger.info(f"Battery state changed to: {display_label} (0x{new_state:02x}) from {side} glass")
             
-            # Handle interactions
-            elif new_state in StateEvent.INTERACTIONS:
-                system_name, display_label = StateEvent.get_interaction(new_state)
-                self._last_interaction = display_label
-                self._last_interaction_side = side
-                
+            if new_state in StateEvent.INTERACTIONS:
+                _, display_label = StateEvent.get_interaction(new_state)
                 if not self._dashboard_mode:
                     self.logger.info(f"Interaction detected: {display_label} (0x{new_state:02x}) from {side} glass")
             
-            # Handle unknown states
-            else:
+            # Log unknown states
+            if not any(new_state in category for category in [
+                StateEvent.PHYSICAL_STATES,
+                StateEvent.DEVICE_STATES,
+                StateEvent.BATTERY_STATES,
+                StateEvent.INTERACTIONS
+            ]):
                 if new_state not in self._unrecognized_states:
                     self._unrecognized_states.add(new_state)
                     self.logger.debug(f"Unrecognized state: 0x{new_state:02x} ({new_state}) from {side} glass")
@@ -198,3 +253,12 @@ class StateManager:
         self._silent_mode = value
         if not self._dashboard_mode:
             self.logger.info(f"Silent mode {'enabled' if value else 'disabled'}") 
+
+    @property
+    def last_device_state_label(self) -> str:
+        """Get the current device state label, including inferred AI state"""
+        if self._last_device_state_label:
+            return self._last_device_state_label
+        elif self._last_device_state:
+            return StateEvent.get_device_state(self._last_device_state)[1]
+        return "None" 
