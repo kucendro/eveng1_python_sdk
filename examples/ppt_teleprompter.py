@@ -9,7 +9,7 @@ from utils.logger import setup_logger
 
 # Configuration
 SEQUENCE_CHUNK_TIME = 3.0  # Time in seconds to display each chunk of text
-MAX_CHARS_PER_CHUNK = 100  # Reduced from 150 to avoid display re-splitting
+MAX_CHARS_PER_CHUNK = 200  # Reduced from 150 to avoid display re-splitting
 
 def split_into_chunks(text, max_chars):
     """Split text into chunks of maximum length while preserving words"""
