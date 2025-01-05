@@ -76,15 +76,20 @@ class EventService:
         elif event_type == COMMANDS.HEARTBEAT:
             await self.connector.state_manager.process_raw_state(data, side)
             if event_type in self._raw_handlers:
-                await self._dispatch_event(event_type, context, self._raw_handlers)
+                await self._dispatch_event(event_type, context, self._raw_handlers[event_type])
+        else:
+            # Forward to raw handlers
+            if event_type in self._raw_handlers:
+                await self._dispatch_event(event_type, context, self._raw_handlers[event_type])
 
     async def _dispatch_event(self, event_type: int, context: EventContext, handlers: dict):
         """Dispatch event to registered handlers"""
         try:
-            if event_type in handlers:
-                for handler in handlers[event_type].keys():
+            # For raw handlers, handlers is the dict of handlers for this event type
+            if isinstance(handlers, dict) and handlers:  # If handlers is a non-empty dict
+                for handler in handlers.keys():
                     try:
-                        await handler(context)
+                        await handler(context.raw_data, context.side)
                     except Exception as e:
                         self.logger.error(f"Error in event handler: {e}")
         except Exception as e:
