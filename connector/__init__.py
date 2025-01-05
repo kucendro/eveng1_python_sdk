@@ -1,15 +1,18 @@
-"""
-G1 Connector module - Core connection handling
-"""
+"""G1 glasses connector package"""
 
 from connector.base import G1Connector
-from connector.bluetooth import BLEManager
-from connector.pairing import PairingManager
-from connector.commands import CommandManager
+from utils.constants import (
+    UUIDS, COMMANDS, EventCategories, StateEvent, 
+    ConnectionState, StateColors, StateDisplay
+)
 
 __all__ = [
     'G1Connector',
-    'BLEManager',
-    'PairingManager',
-    'CommandManager'
+    'UUIDS',
+    'COMMANDS',
+    'EventCategories',
+    'StateEvent',
+    'ConnectionState',
+    'StateColors',
+    'StateDisplay'
 ] 

@@ -4,6 +4,7 @@ Pairing and device management for G1 glasses
 import asyncio
 from typing import Optional, Dict
 from bleak import BleakScanner, BleakClient
+from utils.constants import EventCategories
 
 class PairingManager:
     """Handles device pairing and management"""
@@ -14,6 +15,151 @@ class PairingManager:
         self._pairing_lock = asyncio.Lock()
         self._discovery_cache = {}
         self._last_scan = 0
+
+    async def _verify_windows_pairing(self, address: str) -> bool:
+        """Verify device is paired in Windows"""
+        try:
+            # Use BleakScanner to get paired devices
+            devices = await BleakScanner.discover(timeout=5.0)
+            for device in devices:
+                if device.address.lower() == address.lower():
+                    # Check if device is paired using Bleak's internal API
+                    if hasattr(device, '_device_info') and hasattr(device._device_info, 'pairing'):
+                        return device._device_info.pairing.is_paired
+                    return True  # Fallback if we can't check pairing status
+            return False
+        except Exception as e:
+            self.logger.error(f"Error verifying Windows pairing: {e}")
+            return False
+
+    async def verify_pairing(self) -> bool:
+        """Verify existing pairing is valid"""
+        try:
+            self.logger.debug("Verifying pairing...")
+
+            if not self.connector.config.left_address or not self.connector.config.right_address:
+                self.logger.debug("No saved addresses found")
+                return False
+
+            # First verification
+            for side, addr in [("left", self.connector.config.left_address),
+                             ("right", self.connector.config.right_address)]:
+                try:
+                    client = BleakClient(addr)
+                    await client.connect(timeout=5.0)
+                    await client.disconnect()
+                    self.logger.debug(f"Successfully verified {side} glass pairing")
+                except Exception as e:
+                    self.logger.warning(f"Could not verify {side} glass pairing: {e}")
+                    return False
+
+            # If not paired, do first-time pairing
+            if not self.connector.config.left_paired or not self.connector.config.right_paired:
+                self.logger.info("\nFirst time connection detected!")
+                self.logger.info("The glasses will be paired with your device. This only happens once.")
+                self.logger.info("Please wait while the pairing is completed...")
+
+                # Second verification with pairing
+                for side, addr in [("left", self.connector.config.left_address),
+                                 ("right", self.connector.config.right_address)]:
+                    try:
+                        client = BleakClient(addr)
+                        await client.connect(timeout=5.0)
+                        await client.pair()
+                        await client.disconnect()
+                        self.logger.debug(f"Successfully verified {side} glass pairing")
+                        if side == "left":
+                            self.connector.config.left_paired = True
+                        else:
+                            self.connector.config.right_paired = True
+                    except Exception as e:
+                        self.logger.warning(f"Could not verify {side} glass pairing: {e}")
+                        return False
+
+                self.connector.config.save()
+                self.logger.info("Pairing verification successful")
+
+            return True
+
+        except Exception as e:
+            self.logger.error(f"Error verifying pairing: {e}")
+            return False
+
+    async def _attempt_pairing(self, client: BleakClient, glass_name: str, max_attempts: int = 3) -> bool:
+        """Attempt to pair with a glass"""
+        try:
+            is_left = glass_name == "Left glass"
+            address = client.address
+            side = "left" if is_left else "right"
+            
+            self.logger.debug(f"Starting first-time pairing for {glass_name}")
+            self.connector.console.print(f"\n[yellow]Performing first-time pairing for {glass_name}...[/yellow]")
+
+            for attempt in range(1, max_attempts + 1):
+                try:
+                    # Add delay between attempts
+                    if attempt > 1:
+                        await asyncio.sleep(2)
+                    
+                    client = BleakClient(address)
+                    
+                    # First try to connect without pairing
+                    await client.connect(timeout=20.0)
+                    
+                    if client.is_connected:
+                        self.logger.debug("Connection established, attempting pairing...")
+                        
+                        try:
+                            # Try to pair
+                            await client.pair()
+                        except Exception as pair_error:
+                            # If pairing fails with error 19, try to disconnect and retry
+                            if "19" in str(pair_error):
+                                self.logger.debug(f"Pairing error 19, attempting recovery for {glass_name}")
+                                await client.disconnect()
+                                await asyncio.sleep(2)  # Wait for Windows to clean up
+                                
+                                # Try to connect and pair again
+                                await client.connect(timeout=20.0)
+                                await client.pair()
+                        
+                        self.logger.debug("Pairing successful")
+                        
+                        # Update config
+                        if is_left:
+                            self.connector.config.left_paired = True
+                        else:
+                            self.connector.config.right_paired = True
+                        self.connector.config.save()
+                        
+                        # Disconnect to finalize pairing
+                        await client.disconnect()
+                        await asyncio.sleep(2)  # Increased delay after disconnect
+                        
+                        self.connector.console.print(f"[green]{glass_name} paired and connected![/green]")
+                        
+                        # Notify event service of successful pairing
+                        if self.connector.event_service:
+                            await self.connector.event_service._handle_pairing_complete(side, True)
+                            
+                        return True
+                        
+                except Exception as e:
+                    self.logger.error(f"Connection attempt {attempt} failed: {e}")
+                    if attempt < max_attempts:
+                        self.connector.console.print("[yellow]Retrying connection...[/yellow]")
+                        await asyncio.sleep(2)
+                    continue
+            
+            # Notify event service of failed pairing
+            if self.connector.event_service:
+                await self.connector.event_service._handle_pairing_complete(side, False)
+                
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Pairing attempt failed: {e}")
+            return False
 
     async def discover_glasses(self, timeout: float = 15.0) -> Dict[str, Dict]:
         """Scan for available G1 glasses"""
@@ -42,144 +188,16 @@ class PairingManager:
                 
                 self._discovery_cache = discovered
                 self._last_scan = asyncio.get_event_loop().time()
+                
+                # Notify event service of discovery completion
+                if self.connector.event_service:
+                    await self.connector.event_service._handle_discovery_complete(discovered)
+                    
                 return discovered
                 
         except Exception as e:
             self.logger.error(f"Discovery failed: {e}")
             return {}
-
-    async def _attempt_pairing(self, client: BleakClient, glass_name: str, max_attempts: int = 3) -> bool:
-        """Attempt to pair with a glass"""
-        try:
-            is_left = glass_name == "Left glass"
-            address = client.address  # Store address since we'll recreate the client
-            
-            self.logger.debug(f"Starting first-time pairing for {glass_name}")
-            self.connector.console.print(f"\n[yellow]Performing first-time pairing for {glass_name}...[/yellow]")
-
-            for attempt in range(1, max_attempts + 1):
-                try:
-                    # Create client without any special parameters first - exactly like g1_connector.py
-                    client = BleakClient(address)
-                    
-                    # Connect first
-                    await client.connect(timeout=20.0)
-                    if client.is_connected:
-                        self.logger.debug("Connection established")
-                        
-                        # Simple pair() call - exactly like g1_connector.py
-                        await client.pair()
-                        self.logger.debug("Pairing successful")
-                        
-                        # Update config immediately after successful pair
-                        if is_left:
-                            self.connector.config.left_paired = True
-                        else:
-                            self.connector.config.right_paired = True
-                        self.connector.config.save()
-                        
-                        # Disconnect to finalize pairing
-                        await client.disconnect()
-                        await asyncio.sleep(1)
-                        
-                        self.connector.console.print(f"[green]{glass_name} paired and connected![/green]")
-                        
-                        # After successful connection, check initial state
-                        initial_state = await self.connector.state_manager.handle_state_change(
-                            self.connector.uart_service.last_state,
-                            side="left" if glass_name == "Left glass" else "right"
-                        )
-                        
-                        if not initial_state:
-                            self.logger.warning(f"Could not get initial state for {glass_name}")
-                        
-                        return True
-                        
-                except Exception as e:
-                    self.logger.error(f"Connection attempt {attempt} failed: {e}")
-                    if attempt < max_attempts:
-                        self.connector.console.print("[yellow]Retrying connection...[/yellow]")
-                        await asyncio.sleep(2)
-                    continue
-            
-            return False
-            
-        except Exception as e:
-            self.logger.error(f"Pairing attempt failed: {e}")
-            return False
-
-    async def _verify_windows_pairing(self, address: str) -> bool:
-        """Verify device is paired in Windows"""
-        try:
-            # Use BleakScanner to get paired devices
-            devices = await BleakScanner.discover(timeout=5.0)
-            for device in devices:
-                if device.address.lower() == address.lower():
-                    # Check if device is paired using Bleak's internal API
-                    if hasattr(device, '_device_info') and hasattr(device._device_info, 'pairing'):
-                        return device._device_info.pairing.is_paired
-                    return True  # Fallback if we can't check pairing status
-            return False
-        except Exception as e:
-            self.logger.error(f"Error verifying Windows pairing: {e}")
-            return False
-
-    async def verify_pairing(self) -> bool:
-        """Verify existing pairing is valid"""
-        try:
-            self.logger.debug("Verifying pairing...")
-            
-            # First check if we have addresses
-            if not self.connector.config.left_address or not self.connector.config.right_address:
-                self.logger.debug("No saved addresses found")
-                return False
-            
-            # First verification
-            for side, addr in [("left", self.connector.config.left_address), 
-                              ("right", self.connector.config.right_address)]:
-                try:
-                    client = BleakClient(addr)
-                    await client.connect(timeout=5.0)
-                    await client.disconnect()
-                    self.logger.debug(f"Successfully verified {side} glass pairing")
-                except Exception as e:
-                    self.logger.warning(f"Could not verify {side} glass pairing: {e}")
-                    return False
-            
-            self.logger.info("Pairing verification successful")
-            
-            # If not paired, do first-time pairing
-            if not self.connector.config.left_paired or not self.connector.config.right_paired:
-                self.logger.info("\nFirst time connection detected!")
-                self.logger.info("The glasses will be paired with your device. This only happens once.")
-                self.logger.info("Please wait while the pairing is completed...")
-                
-                # Second verification
-                self.logger.debug("Verifying pairing...")
-                for side, addr in [("left", self.connector.config.left_address), 
-                                 ("right", self.connector.config.right_address)]:
-                    try:
-                        client = BleakClient(addr)
-                        await client.connect(timeout=5.0)
-                        await client.pair()  # Add pairing here
-                        await client.disconnect()
-                        self.logger.debug(f"Successfully verified {side} glass pairing")
-                        if side == "left":
-                            self.connector.config.left_paired = True
-                        else:
-                            self.connector.config.right_paired = True
-                    except Exception as e:
-                        self.logger.warning(f"Could not verify {side} glass pairing: {e}")
-                        return False
-                
-                self.connector.config.save()
-                self.logger.info("Pairing verification successful")
-                
-            return True
-            
-        except Exception as e:
-            self.logger.error(f"Error verifying pairing: {e}")
-            return False
 
     async def pair_glasses(self) -> bool:
         """Pair with discovered glasses"""

@@ -184,18 +184,66 @@ Supporting utilities:
 ## Examples
 
 ### Basic Usage
-- `simple_connect.py`: Basic connection demonstration
-- `interactions.py`: Monitor and log device interactions
-- `dashboard.py`: Monitor statuses and logs
+
+#### Simple Connect
+`simple_connect.py`
+Basic connection demonstration
+
+```bash
+python -m examples.simple_connect
+```
+
+#### Monitor State Changes
+`interactions.py`
+Monitor and log device interactions
+
+```bash
+python -m examples.interactions
+```
+
+#### Dashboard
+`dashboard.py`
+Monitor statuses and logs
+
+```bash
+python -m examples.dashboard
+```
 
 ### Display Features
-- `send_text.py`: Text display with multi-line support
-- `send_image.py`: Image transmission (1-bit, 576x136 BMP)
+
+#### Text Display
+`send_text.py`  (TODO)
+Text display with multi-line support (TODO)
+
+```bash
+python -m examples.send_text
+```
+
+#### Image Display
+`send_image.py`  (TODO)
+Image transmission (1-bit, 576x136 BMP) 
+
+```bash
+python -m examples.send_image
+```
 
 ### Advanced Features
-- `microphone.py`: Audio recording demonstration
-- `even_ai.py`: Even AI integration example
 
+#### Microphone
+`microphone.py` (TODO)
+Audio recording demonstration
+
+```bash
+python -m examples.microphone
+```
+
+#### Even AI
+`even_ai.py` (TODO)
+Even AI integration example 
+
+```bash
+python -m examples.even_ai
+```
 
 ## Protocol Details
 
@@ -224,17 +272,59 @@ Default settings can be modified in `g1_config.json`:
 - `log_file`: Specify a custom log file path
 - `log_to_console`: Enable or disable logging to the console
 - `log_to_file`: Enable or disable logging to a file
-- `log_to_db`: Enable or disable logging to a database (TODO)
 
 
+## Roadmap & Planned Improvements
+
+### Immediate Priority
+- [ ] expand interactions with other groups beyond 0xF5 (add a category column to the table and give it a bit more spacing), continue to exclude heartbeat though
+- [ ] colour interaction logs depending on if they are known - green (have a definition in constants) or not known - orange)
+- [ ] 
+- [ ] Implement text sending functionality
+- [ ] Add comprehensive examples for text display and interaction
+- [ ] Document text positioning and formatting options
+
+### High Priority (Developer Experience)
+1. Connection Management
+   - [ ] Implement Windows BLE connection recovery
+     * Detect and reuse existing connections
+     * Add configurable retry timing for connection attempts
+     * Implement force-disconnect on SDK exit
+     * Add connection state detection and logging
+
+2. Pairing Improvements
+   - [ ] Add robust pairing state detection and management
+     * Detect proper pairing state vs. just connected state
+     * Add automatic re-pairing when connection is incomplete avoiding the need to delete the config file
+     * Add user guidance for connection troubleshooting
+
+3. Documentation Improvements (add more detail to this readme doc)
+   - [ ] Add inline examples in docstrings
+   - [ ] add more detail/quickstarts/examples to this readme doc
+   - [ ] Document error scenarios and solutions
+
+4. Developer Tools
+   - [ ] Create higher-level abstractions for common patterns
+   - [ ] Add more example applications
+   - [ ] Implement helper utilities for content formatting
+
+5. Reliability Enhancements
+   - [ ] Improve connection state recovery
+   - [ ] Add automated reconnection strategies
+   - [ ] Enhance error handling with specific solutions
+   - [ ] Implement better battery and health monitoring (if supported by the device, events are a bit vague)
+
+6. Code Structure
+   - [ ] Split G1Connector into focused components
+   - [ ] Add more type hints and dataclasses
+   - [ ] Implement async context managers
+   - [ ] Add configuration validation
 
 
-## Notes for improvements
-When we exit, windows BT manager maintains a connection for a while blocking a new connection, can we hook into an existing connection if it is still active?
-if not, and in the case of any other errors at the start, try to connect again after a couple of seconds, then after a few more seconds (as per config)
-or can we force windows BT manager to disconnect when we exit?
-
-when the g1 is paired with the phone then the sdk running on pc struggled to connect with it. closing the mobile app and disabling bluetooth on the phone doesnt seem to help.
-only removing the G1 device (L and R) from windows BT manager seems to help, running the sdk again will then redo the paiting step and establish a connection. but this DOES NOT force the pairing.
-only removing the device AND deleting the config file seems to force the pairing and create a proper connection (heartbeat and events dont work when not paired).
-can we detect if the devices are paired and, if not, force the pairing again and create a proper connection? 
+### Medium Priority
+   - [ ] Structured telemetry collection
+   - [ ] Performance benchmarks
+   - [ ] Circuit breakers for problematic operations
+   - [ ] Formal dependency injection
+   - [ ] Structured logging
+   - [ ] Performance optimization

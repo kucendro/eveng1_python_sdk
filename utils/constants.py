@@ -1,8 +1,5 @@
-"""
-Constants used throughout the G1 SDK
-"""
-
-from enum import IntEnum, Enum
+"""Constants for G1 glasses SDK"""
+from enum import Enum, IntEnum
 from typing import Dict, Tuple
 
 class ConnectionState(str, Enum):
@@ -11,75 +8,31 @@ class ConnectionState(str, Enum):
     CONNECTING = "Connecting..."
     CONNECTED = "Connected"
     SCANNING = "Scanning..."
+    PAIRING = "Pairing..."
+    PAIRING_FAILED = "Pairing Failed"
 
-class UUIDS:
-    """Bluetooth UUIDs used by G1 glasses"""
-    UART_SERVICE = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-    UART_TX = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-    UART_RX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-
-class COMMANDS:
-    """Command codes for G1 glasses"""
-    # Command structures
-    HEARTBEAT_CMD = bytes([0x25, 0x06, 0x00, 0x01, 0x04, 0x01])
-    IMAGE_END_CMD = bytes([0x20, 0x0D, 0x0E])
-    
-    # event categories
-    HEARTBEAT = 0x25
-    STATE_CHANGE = 0xF5
-    DASHBOARD = 0x22
-    
-    #TEXT_DISPLAY = 0x4E
-    #IMAGE_DATA = 0x15
-    #IMAGE_END = 0x20
-    #IMAGE_CRC = 0x16
-    #MIC_CONTROL = 0x0E
-    #MIC_DATA = 0xF1
-    #EVEN_AI = 
-    
-    # Response codes
-    SUCCESS = 0xC9
-    FAILURE = 0xCA
-    
-    @classmethod
-    def get_heartbeat_cmd(cls) -> bytes:
-        """Get heartbeat command"""
-        return cls.HEARTBEAT_CMD
-    
-    @classmethod
-    def get_image_end_cmd(cls) -> bytes:
-        """Get image end command"""
-        return cls.IMAGE_END_CMD
-
-
-class NOTIFICATIONS:
-    """Notification types from glasses"""
-    STATE_CHANGE = 0xF5
-    MIC_DATA = 0xF1
-    HEARTBEAT_RESPONSE = 0x25
-    COMMAND_RESPONSE = 0xC9
-    ERROR_RESPONSE = 0xCA
-    
-    # Screen status bits
-    SCREEN_NEW_CONTENT = 0x01
-    SCREEN_EVEN_AI = 0x30
-    SCREEN_AI_COMPLETE = 0x40
-    SCREEN_MANUAL_MODE = 0x50
-    SCREEN_ERROR = 0x60 
-
+class StateColors:
+    """Color definitions for different states"""
+    SUCCESS = "green"
+    WARNING = "yellow"
+    ERROR = "red"
+    INFO = "blue"
+    NEUTRAL = "grey70"
+    HIGHLIGHT = "cyan"
+    BRIGHT = "bright_blue"
 
 class StateEvent:
-    """State and interaction events for G1 glasses"""
-        
-    # Physical States - (code, system_name, display_label)
-    PHYSICAL_STATES: Dict[int, Tuple[str, str]] = {
-        0x06: ("WEARING", "Wearing"),
-        0x07: ("TRANSITIONING", "Transitioning"),
-        0x08: ("CRADLE", "In the cradle?"),
-        0x09: ("CRADLE_FULL", "In the cradle and charged?"),
+    """State events (0xF5) and their subcategories"""
+    
+    # Physical States with their display properties
+    PHYSICAL_STATES: Dict[int, Tuple[str, str, str]] = {
+        0x06: ("WEARING", "Wearing", StateColors.SUCCESS),
+        0x07: ("TRANSITIONING", "Transitioning", StateColors.WARNING),
+        0x08: ("CRADLE", "In the cradle", StateColors.INFO),
+        0x09: ("CRADLE_FULL", "Charged in cradle", StateColors.SUCCESS),
     }
     
-    # Device States, including connectivity - (code, system_name, display_label)
+    # Device States
     DEVICE_STATES: Dict[int, Tuple[str, str]] = {
         0x0a: ("DEVICE_UNKNOWN_0a", "Device unknown 0a"), # this one started appearing after the firmware update on 2025-01-02 (left and right)
         0x0f: ("DEVICE_UNKNOWN_0F", "Device unknown 0f"), # seen at regular intervals while device was connect out and in cradle over 8 hours
@@ -95,55 +48,91 @@ class StateEvent:
         0x0e: ("BATTERY_CHARGING", "Battery charging?"),
     }
     
-    # Interaction Events - (code, system_name, display_label)
+    # Interactions
     INTERACTIONS: Dict[int, Tuple[str, str]] = {
-        0x00: ("DOUBLE_TAP", "Double tap"), # works left and right
-        0x01: ("SINGLE_TAP", "Single tap"), # does not trigger an event, internal use only?
-        0x02: ("OPEN_DASHBOARD_START", "Open dashboard start"),  # followed by 0x1e, this seems to indicate open dashboard
-        0x03: ("CLOSE_DASHBOARD_START", "Close dashboard start"),  # followed by 0x1f, this seems to indicate close dashboard
-        0x04: ("SILENT_MODE_ON", "Silent mode enabled"), # works left and right
-        0x05: ("SILENT_MODE_OFF", "Silent mode disabled"), # works left and right
-        0x17: ("LONG_PRESS", "Long press"), # left enables ai, right does not trigger an event, internal use only?
-        0x1e: ("OPEN_DASHBOARD", "Open dashboard confirmed"), # preceded by 0x02, this seems to indicate open dashboard
-        0x1f: ("CLOSE_DASHBOARD", "Close dashboard confirmed"), # preceded by 0x03, this seems to indicate close dashboard
+        0x00: ("DOUBLE_TAP", "Double tap"),
+        0x01: ("SINGLE_TAP", "Single tap"),
+        0x17: ("LONG_PRESS", "Long press"),
+        0x04: ("SILENT_MODE_ON", "Silent mode enabled"),
+        0x05: ("SILENT_MODE_OFF", "Silent mode disabled"),
+        0x02: ("OPEN_DASHBOARD_START", "Open dashboard start"),
+        0x03: ("CLOSE_DASHBOARD_START", "Close dashboard start"),
+        0x1E: ("OPEN_DASHBOARD_CONFIRM", "Open dashboard confirmed"),
+        0x1F: ("CLOSE_DASHBOARD_CONFIRM", "Close dashboard confirmed")
     }
 
-    # Unknown or unused events - (code, system_name, display_label)
-    UNKNOWN: Dict[int, Tuple[str, str]] = {
-        0x0b: ("UNKNOWN0B", "Unknown (0x0b)"),
-        0x0c: ("UNKNOWN0C", "Unknown (0x0c)"),
-        0x0d: ("UNKNOWN0D", "Unknown (0x0d)"),
-        0x10: ("UNKNOWN10", "Unknown (0x10)"),
-        0x13: ("UNKNOWN13", "Unknown (0x13)"),
-        0x16: ("UNKNOWN16", "Unknown (0x16)"),
-        0x18: ("UNKNOWN18", "Unknown (0x18)"),
-        0x19: ("UNKNOWN19", "Unknown (0x19)"),
-        0x1a: ("UNKNOWN1A", "Unknown (0x1a)"),
-        0x1b: ("UNKNOWN1B", "Unknown (0x1b)"),
-        0x1c: ("UNKNOWN1C", "Unknown (0x1c)"),
-        0x1d: ("UNKNOWN1D", "Unknown (0x1d)")
-    }
-    
     @classmethod
-    def get_battery_state(cls, code: int) -> Tuple[str, str]:
-        """Get (system_name, display_label) for a battery state code"""
-        return cls.BATTERY_STATES.get(code, ("UNKNOWN", f"Unknown battery state (0x{code:02x})"))
-
-    @classmethod
-    def get_physical_state(cls, code: int) -> Tuple[str, str]:
-        """Get (system_name, display_label) for a physical state code"""
-        if code in cls.PHYSICAL_STATES:
-            return cls.PHYSICAL_STATES[code]
-        return ("UNKNOWN", f"Unknown state (0x{code:02x})")
-        
-    @classmethod
-    def get_interaction(cls, code: int) -> Tuple[str, str]:
-        """Get (system_name, display_label) for an interaction code"""
-        return cls.INTERACTIONS.get(code, ("UNKNOWN", f"Unknown interaction (0x{code:02x})"))
+    def get_physical_state(cls, code) -> Tuple[str, str, str]:
+        """Get physical state name, label and color"""
+        try:
+            if isinstance(code, str):
+                if code.startswith('f5'):
+                    code = int(code[2:], 16)
+                else:
+                    code = int(code, 16)
+                    
+            if code in cls.PHYSICAL_STATES:
+                return cls.PHYSICAL_STATES[code]
+                
+            return "UNKNOWN", f"Unknown (0x{code:02x})", StateColors.ERROR
+            
+        except (ValueError, TypeError):
+            return "UNKNOWN", "Invalid State Code", StateColors.ERROR
 
     @classmethod
     def get_device_state(cls, code: int) -> Tuple[str, str]:
-        """Get (system_name, display_label) for a device state code"""
-        return cls.DEVICE_STATES.get(code, ("UNKNOWN", f"Unknown device state (0x{code:02x})"))
+        """Get device state name and label"""
+        return cls.DEVICE_STATES.get(code, ("UNKNOWN", f"Unknown (0x{code:02X})"))
+
+    @classmethod
+    def get_interaction(cls, code: int) -> Tuple[str, str]:
+        """Get interaction name and label"""
+        return cls.INTERACTIONS.get(code, ("UNKNOWN", f"Unknown (0x{code:02X})"))
+
+class UUIDS:
+    """Bluetooth UUIDs for G1 glasses"""
+    UART_SERVICE = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+    UART_TX = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+    UART_RX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+
+class COMMANDS:
+    """Command codes for G1 glasses"""
+    HEARTBEAT = 0x25
+    SILENT_MODE_ON = 0x04 # 3 taps
+    SILENT_MODE_OFF = 0x05 # 3 taps
+    AI_ENABLE = 0x17 #long press left
+    HEARTBEAT_CMD = bytes([0x25, 0x06, 0x00, 0x01, 0x04, 0x01])
+
+class StateDisplay:
+    """Display information derived from StateEvent definitions"""
+    @staticmethod
+    def get_physical_states() -> Dict[str, Tuple[str, str]]:
+        """Generate physical states display dictionary"""
+        states = {
+            name: (color, label) 
+            for _, (name, label, color) in StateEvent.PHYSICAL_STATES.items()
+        }
+        # Add unknown state
+        states["UNKNOWN"] = (StateColors.ERROR, "Unknown")
+        return states
+    
+    # Access as a class variable
+    PHYSICAL_STATES = get_physical_states()
+
+    CONNECTION_STATES = {
+        ConnectionState.CONNECTED: StateColors.SUCCESS,
+        ConnectionState.DISCONNECTED: StateColors.ERROR,
+        ConnectionState.CONNECTING: StateColors.WARNING,
+        ConnectionState.SCANNING: StateColors.INFO,
+        ConnectionState.PAIRING: StateColors.WARNING,
+        ConnectionState.PAIRING_FAILED: StateColors.ERROR
+    }
+
+class EventCategories:
+    """Event categories for G1 glasses"""
+    STATE_CHANGE = 0xf5
+    HEARTBEAT = 0x25
+    RESPONSE = 0x03
+    ERROR = 0x04
 
 

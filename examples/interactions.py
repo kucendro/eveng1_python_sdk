@@ -2,21 +2,17 @@
 import asyncio
 import logging
 from datetime import datetime
-from connector.base import G1Connector
-from utils.constants import StateEvent
+from connector import G1Connector
+from utils.constants import (
+    StateEvent, EventCategories, StateColors, 
+    StateDisplay, ConnectionState
+)
 from utils.logger import setup_logger
-from utils.config import Config
 from rich.console import Console
 
 class InteractionLogger:
     def __init__(self):
-        from utils.logger import setup_logger
-        from utils.config import Config
-        from datetime import datetime
-        from rich.console import Console
-        
-        config = Config.load()
-        self.logger = setup_logger(config, "G1Interactions")
+        self.logger = setup_logger()
         self.log_count = 0
         self.console = Console()
 
@@ -32,20 +28,18 @@ class InteractionLogger:
             self.print_header()
         self.log_count += 1
         
-        # Get current timestamp
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # Format side string - use actual side or "both" if None
         side_str = side if side else "both"
         
-        # Check if this is an unknown state first
-        if "unknown" in label.lower():
-            base_color = "yellow"
-        else:
-            # Base color based on side for known states
-            base_color = "grey74" if side == "left" else "white"
+        # Color logic based on event type
+        base_color = {
+            "physical": "blue",
+            "battery": "yellow",
+            "device": "green",
+            "interaction": "cyan",
+            "unknown": "red"
+        }.get(event_type, "white")
         
-        # Format each column with exact spacing
         formatted_msg = (
             f"{timestamp}  "             # timestamp (19 chars) + 2 spaces
             f"{raw_code:02x}      "      # code (2 chars) + 6 spaces
@@ -54,55 +48,61 @@ class InteractionLogger:
             f"{label}"                   # label (remaining space)
         )
         
-        # Print with color, ensuring the entire line uses the same color
         self.console.print(f"[{base_color}]{formatted_msg}[/{base_color}]")
 
+class EventContext:
+    """Context object for events"""
+    def __init__(self, raw_data: bytes, side: str):
+        self.raw_data = raw_data
+        self.side = side
+
 async def main():
-    # Create connector with minimal logging
+    # Disable all console logging
+    logging.getLogger().setLevel(logging.ERROR)
+    
     glasses = G1Connector()
     logger = InteractionLogger()
     
-    # Connect first, with normal logging
-    await glasses.connect()
-    
-    # Clear the screen or add spacing before starting interaction monitoring
-    print("\nMonitoring state changes (Ctrl+C to exit)...\n")
-    
-    # Track raw states
-    async def raw_state_callback(state_code: int, is_physical: bool, side: str):
-        """Handle raw state changes"""
-        if state_code in StateEvent.BATTERY_STATES:
-            _, label = StateEvent.get_battery_state(state_code)
-            logger.log_event(state_code, "battery", side, label)
-        elif state_code in StateEvent.PHYSICAL_STATES:
-            _, label = StateEvent.get_physical_state(state_code)
-            logger.log_event(state_code, "physical", side, label)
-        elif state_code in StateEvent.DEVICE_STATES:
-            _, label = StateEvent.get_device_state(state_code)
-            logger.log_event(state_code, "device", side, label)
-        elif state_code in StateEvent.INTERACTIONS:
-            _, label = StateEvent.get_interaction(state_code)
-            logger.log_event(state_code, "interaction", side, label)
-        else:
-            logger.log_event(state_code, "unknown", side, f"Unknown (0x{state_code:02x})")
-
-    # Only register callback after successful connection
-    if glasses.left_client and glasses.right_client:
-        # Disable all console logging from glasses
-        glasses.logger.handlers = [h for h in glasses.logger.handlers if not isinstance(h, logging.StreamHandler)]
-        # Remove any state change callbacks
-        glasses.state_manager._state_callbacks.clear()
-        # Register only the raw state callback
-        glasses.state_manager.add_raw_state_callback(raw_state_callback)
-        
-        try:
-            # Keep the script running
-            while True:
-                await asyncio.sleep(0.1)
-        except KeyboardInterrupt:
-            print("\nExited by user")
-    else:
+    # Connect first
+    print("Connecting to glasses...")
+    success = await glasses.connect()
+    if not success:
         print("\nFailed to connect to glasses")
+        return
+    
+    # Clear console and show monitoring message
+    print("\033[H\033[J")  # Clear screen
+    print("Monitoring state changes (Ctrl+C to exit)...")
+    await asyncio.sleep(0.5)
+    
+    # Now show the table headers
+    logger.print_header()
+    
+    async def handle_state_change(raw_code: int, side: str, label: str):
+        """Handle state changes from the state manager"""
+        event_type = "unknown"
+        if raw_code in StateEvent.BATTERY_STATES:
+            event_type = "battery"
+        elif raw_code in StateEvent.PHYSICAL_STATES:
+            event_type = "physical"
+        elif raw_code in StateEvent.DEVICE_STATES:
+            event_type = "device"
+        elif raw_code in StateEvent.INTERACTIONS:
+            event_type = "interaction"
+            
+        logger.log_event(raw_code, event_type, side, label)
+    
+    # Register callback silently
+    glasses.state_manager.add_raw_state_callback(handle_state_change)
+    
+    try:
+        while True:
+            await asyncio.sleep(0.1)
+    except KeyboardInterrupt:
+        print("\nExited by user")
+    finally:
+        glasses.state_manager.remove_raw_state_callback(handle_state_change)
+        await glasses.disconnect()
 
 if __name__ == "__main__":
     try:

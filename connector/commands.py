@@ -3,9 +3,9 @@ Command handling for G1 glasses
 """
 import asyncio
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Tuple
 from bleak import BleakClient
-from utils.constants import UUIDS, COMMANDS
+from utils.constants import UUIDS, COMMANDS, EventCategories
 
 class CommandManager:
     """Manages command queuing and execution"""
@@ -45,6 +45,49 @@ class CommandManager:
                 pass
             self._heartbeat_task = None
 
+    async def send_command(self, client: BleakClient, command: bytes, 
+                          expect_response: bool = False, 
+                          timeout: float = 2.0) -> Optional[Tuple[bytes, int]]:
+        """Send command and optionally wait for response"""
+        try:
+            await self._command_queue.put((command, client))
+            
+            if expect_response:
+                # Wait for response through event service
+                response = await self._wait_for_response(command[0], timeout)
+                if response:
+                    return response.raw_data, response.raw_data[0]
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Error sending command: {e}")
+            return None
+
+    async def _wait_for_response(self, command_type: int, timeout: float) -> Optional[Any]:
+        """Wait for command response"""
+        try:
+            # Create future for response
+            future = asyncio.Future()
+            
+            def response_handler(data: bytes, context: Any):
+                if data[0] in [EventCategories.COMMAND_RESPONSE, EventCategories.ERROR_RESPONSE]:
+                    future.set_result(context)
+            
+            # Subscribe to raw events temporarily
+            self.connector.event_service.subscribe_raw(EventCategories.RESPONSE, response_handler)
+            
+            try:
+                return await asyncio.wait_for(future, timeout)
+            except asyncio.TimeoutError:
+                self.logger.warning(f"Command response timeout for type 0x{command_type:02x}")
+                return None
+            finally:
+                self.connector.event_service.unsubscribe(response_handler)
+                
+        except Exception as e:
+            self.logger.error(f"Error waiting for response: {e}")
+            return None
+
     async def send_command_with_retry(self, client: BleakClient, data: bytes, retries: int = 3) -> bool:
         """Send command with retry logic similar to official app"""
         for attempt in range(retries):
@@ -61,7 +104,7 @@ class CommandManager:
     async def send_heartbeat(self, client: BleakClient) -> None:
         """Send heartbeat command with proper structure"""
         try:
-            await self.send_command_with_retry(client, COMMANDS.HEARTBEAT_CMD)
+            await self.send_command_with_retry(client, COMMANDS.HEARTBEAT_CMD)  # Restored original command
             self.last_heartbeat = time.time()
             # Log heartbeat to file only
             self.logger.debug(f"Heartbeat sent")

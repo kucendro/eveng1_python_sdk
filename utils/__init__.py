@@ -1,18 +1,19 @@
-"""
-G1 Utils module - Utility functions and shared resources
-"""
+"""Utility functions and constants for G1 glasses SDK"""
 
-from utils.constants import UUIDS, COMMANDS, NOTIFICATIONS, StateEvent, ConnectionState
 from utils.logger import setup_logger, user_guidance
-from utils.config import Config
+from utils.constants import (
+    UUIDS, COMMANDS, EventCategories, StateEvent, 
+    ConnectionState, StateColors, StateDisplay
+)
 
 __all__ = [
-    'UUIDS',
-    'COMMANDS',
-    'NOTIFICATIONS',
-    'StateEvent',
-    'ConnectionState',
     'setup_logger',
     'user_guidance',
-    'Config'
+    'UUIDS',
+    'COMMANDS',
+    'EventCategories',
+    'StateEvent',
+    'ConnectionState',
+    'StateColors',
+    'StateDisplay'
 ] 

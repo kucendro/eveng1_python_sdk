@@ -7,7 +7,10 @@ from bleak import BleakClient, BleakScanner
 from typing import Optional
 from rich.table import Table
 
-from utils.constants import UUIDS, COMMANDS, StateEvent
+from utils.constants import (
+    UUIDS, COMMANDS, EventCategories, StateEvent, 
+    StateColors, StateDisplay, ConnectionState
+)
 from utils.logger import user_guidance
 from connector.pairing import PairingManager
 
@@ -29,7 +32,7 @@ class BLEManager:
     async def scan_for_glasses(self) -> bool:
         """Scan for G1 glasses and save their addresses"""
         try:
-            self.connector.state_manager.connection_state = "Scanning..."
+            self.connector.state_manager.set_connection_state(ConnectionState.SCANNING)
             self.logger.info("Starting scan for glasses...")
             user_guidance(self.logger, "\n[yellow]Scanning for G1 glasses...[/yellow]")
             
@@ -53,7 +56,7 @@ class BLEManager:
                         user_guidance(self.logger, f"[green]Found right glass: {device.name}[/green]")
 
             if not (left_found and right_found):
-                # Guide user through setup
+                self.connector.state_manager.set_connection_state(ConnectionState.DISCONNECTED)
                 user_guidance(self.logger, "\n[yellow]Glasses not found. Please ensure:[/yellow]")
                 user_guidance(self.logger, "1. Glasses are properly prepared and seated in the powered cradle:")
                 user_guidance(self.logger, "   - First close the left temple/arm")
@@ -68,6 +71,7 @@ class BLEManager:
 
         except Exception as e:
             self.logger.error(f"Scan failed: {e}")
+            self.connector.state_manager.set_connection_state(ConnectionState.DISCONNECTED)
             user_guidance(self.logger, f"\n[red]Error during scan: {e}[/red]")
             return False
 
@@ -76,13 +80,12 @@ class BLEManager:
         try:
             self.logger.info("[yellow]Connecting to G1, please wait...[/yellow]")
             
-            # Set connecting state once at the start
-            self.connector.state_manager.connection_state = "Connecting..."
+            self.connector.state_manager.set_connection_state(ConnectionState.CONNECTING)
             
             # First verify/attempt pairing
             if not await self.pairing_manager.verify_pairing():
                 self.logger.error("[red]Error connecting, retrying...[/red]")
-                self.connector.state_manager.connection_state = "Disconnected"
+                self.connector.state_manager.set_connection_state(ConnectionState.DISCONNECTED)
                 return False
 
             # Connect to both glasses
@@ -92,19 +95,95 @@ class BLEManager:
                 # Start command manager and heartbeat
                 await self.connector.command_manager.start()
                 self.logger.info("[green]Connected successfully[/green]")
-                self.connector.state_manager.connection_state = "Connected"
+                self.connector.state_manager.set_connection_state(ConnectionState.CONNECTED)
                 # Start monitoring
                 self._monitoring_task = asyncio.create_task(self._monitor_connection_quality())
             else:
                 self.logger.error("[red]Error connecting, retrying...[/red]")
-                self.connector.state_manager.connection_state = "Disconnected"
+                self.connector.state_manager.set_connection_state(ConnectionState.DISCONNECTED)
                 
             return success
             
         except Exception as e:
             self.logger.error(f"[red]Connection failed: {e}[/red]")
-            self.connector.state_manager.connection_state = "Disconnected"
+            self.connector.state_manager.set_connection_state(ConnectionState.DISCONNECTED)
             return False
+
+    async def disconnect(self):
+        """Disconnect from glasses"""
+        try:
+            self._shutting_down = True
+            
+            # Cancel monitoring task
+            if self._monitoring_task:
+                self._monitoring_task.cancel()
+                try:
+                    await self._monitoring_task
+                except asyncio.CancelledError:
+                    pass
+                self._monitoring_task = None
+                
+            # Stop command manager
+            await self.connector.command_manager.stop()
+            
+            # Disconnect both glasses
+            for side in ['left', 'right']:
+                client = getattr(self.connector, f"{side}_client", None)
+                if client and client.is_connected:
+                    await client.disconnect()
+                    setattr(self.connector, f"{side}_client", None)
+                    
+            self.connector.state_manager.set_connection_state(ConnectionState.DISCONNECTED)
+            
+        except Exception as e:
+            self.logger.error(f"Error during disconnect: {e}")
+
+    def _create_status_table(self) -> Table:
+        """Create status table with all required information"""
+        table = Table(box=True, border_style="blue", title="G1 Glasses Status")
+        
+        # Connection states with colors
+        for side in ['Left', 'Right']:
+            client = getattr(self.connector, f"{side.lower()}_client", None)
+            status = "[green]Connected[/green]" if client and client.is_connected else "[red]Disconnected[/red]"
+            table.add_row(f"{side} Glass", status)
+            
+        # Physical state with appropriate color
+        system_name, _ = StateEvent.get_physical_state(self.connector.state_manager._physical_state)
+        state_colors = {
+            "WEARING": "green",
+            "TRANSITIONING": "yellow",
+            "CRADLE": "blue",
+            "CRADLE_CHARGING": "yellow",
+            "CRADLE_FULL": "bright_blue",
+            "UNKNOWN": "red"
+        }
+        color = state_colors.get(system_name, "white")
+        state = self.connector.state_manager.physical_state
+        table.add_row("State", f"[{color}]{state}[/{color}]")
+        
+        # Add last interaction if any
+        interaction = self.connector.state_manager.last_interaction
+        if interaction and interaction != "None":
+            table.add_row("Last Interaction", f"[{StateColors.HIGHLIGHT}]{interaction}[/{StateColors.HIGHLIGHT}]")
+        
+        # Last heartbeat timing
+        if self._last_heartbeat:
+            elapsed = time.time() - self._last_heartbeat
+            table.add_row("Last Heartbeat", f"{elapsed:.1f}s ago")
+        
+        # Silent mode status
+        table.add_row("Silent Mode", 
+                     f"[{StateColors.WARNING}]On[/{StateColors.WARNING}]" if self._silent_mode 
+                     else f"[{StateColors.NEUTRAL}]Off[/{StateColors.NEUTRAL}]")
+        
+        # Error information
+        if self._error_count > 0:
+            table.add_row("Errors", f"[{StateColors.ERROR}]{self._error_count}[/{StateColors.ERROR}]")
+            if self._last_error:
+                table.add_row("Last Error", f"[{StateColors.ERROR}]{self._last_error}[/{StateColors.ERROR}]")
+        
+        return table
 
     async def _verify_connection(self, client: BleakClient, glass_name: str) -> bool:
         """Verify connection and services are available"""
@@ -222,35 +301,6 @@ class BLEManager:
         if error:
             self.connector._connection_quality[side]['errors'] += 1 
 
-    async def disconnect(self):
-        """Disconnect from glasses"""
-        try:
-            self._shutting_down = True
-            
-            # Cancel monitoring task
-            if self._monitoring_task:
-                self._monitoring_task.cancel()
-                try:
-                    await self._monitoring_task
-                except asyncio.CancelledError:
-                    pass
-                self._monitoring_task = None
-                
-            # Stop command manager
-            await self.connector.command_manager.stop()
-            
-            # Disconnect both glasses
-            for side in ['left', 'right']:
-                client = getattr(self.connector, f"{side}_client")
-                if client and client.is_connected:
-                    await client.disconnect()
-                    setattr(self.connector, f"{side}_client", None)
-                    
-            self.connector.state_manager.connection_state = "Disconnected"
-            
-        except Exception as e:
-            self.logger.error(f"Error during disconnect: {e}")
-
     async def start_monitoring(self):
         """Start connection quality monitoring"""
         if not self._monitoring_task:
@@ -351,54 +401,6 @@ class BLEManager:
         except Exception as e:
             self.logger.error(f"Error connecting to {side} glass: {e}")
             return False 
-
-    def _create_status_table(self) -> Table:
-        """Create status table with all required information"""
-        table = Table(box=True, border_style="blue", title="G1 Glasses Status")
-        
-        # Connection states with colors
-        for side in ['Left', 'Right']:
-            client = getattr(self.connector, f"{side.lower()}_client", None)
-            status = "[green]Connected[/green]" if client and client.is_connected else "[red]Disconnected[/red]"
-            table.add_row(f"{side} Glass", status)
-        
-        # Physical state and last interaction
-        state = self.connector.state_manager.physical_state
-        interaction = self.connector.state_manager.last_interaction
-        
-        # Add state with appropriate color
-        system_name, _ = StateEvent.get_physical_state(self.connector.state_manager._physical_state)
-        state_colors = {
-            "WEARING": "green",
-            "TRANSITIONING": "yellow",
-            "CRADLE": "blue",
-            "CRADLE_CHARGING": "yellow",
-            "CRADLE_FULL": "bright_blue",
-            "UNKNOWN": "red"
-        }
-        color = state_colors.get(system_name, "white")
-        table.add_row("State", f"[{color}]{state}[/{color}]")
-        
-        # Add last interaction if any
-        if interaction != "None":
-            table.add_row("Last Interaction", f"[cyan]{interaction}[/cyan]")
-        
-        # Last heartbeat timing
-        if self._last_heartbeat:
-            elapsed = time.time() - self._last_heartbeat
-            table.add_row("Last Heartbeat", f"{elapsed:.1f}s ago")
-        
-        # Silent mode status
-        table.add_row("Silent Mode", 
-                     "[yellow]On[/yellow]" if self._silent_mode else "[grey70]Off[/grey70]")
-        
-        # Error information
-        if self._error_count > 0:
-            table.add_row("Errors", f"[red]{self._error_count}[/red]")
-            if self._last_error:
-                table.add_row("Last Error", f"[red]{self._last_error}[/red]")
-        
-        return table
 
     def set_silent_mode(self, enabled: bool):
         """Toggle silent mode"""

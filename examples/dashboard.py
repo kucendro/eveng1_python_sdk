@@ -9,10 +9,13 @@ from rich.logging import RichHandler
 from collections import deque
 import logging
 from connector import G1Connector
-from services.state import ConnectionState
+from utils.constants import (
+    UUIDS, COMMANDS, EventCategories, StateEvent, 
+    ConnectionState, StateColors, StateDisplay
+)
 import time
 from rich.box import ROUNDED
-from utils.constants import StateEvent
+from utils.logger import set_dashboard_mode
 
 class LogPanel:
     """Panel to display recent log messages"""
@@ -124,78 +127,70 @@ def create_status_table(glasses: G1Connector) -> Table:
     """Create status table from G1 connector state"""
     try:
         table = Table(box=ROUNDED)
-        
-        # Add column headers with consistent styling
         table.add_column("[bold cyan]Item", style="cyan")
         table.add_column("[bold cyan]Status", style="white")
         
-        # Connection status with more detail
+        # Connection status with error counts
         left_name = glasses.config.left_name or "Unknown"
         right_name = glasses.config.right_name or "Unknown"
+        left_errors = glasses.state_manager.error_counts["left"]
+        right_errors = glasses.state_manager.error_counts["right"]
+        
         left_status = f"[green]Connected ({left_name})[/green]" if glasses.left_client and glasses.left_client.is_connected else "[red]Disconnected[/red]"
         right_status = f"[green]Connected ({right_name})[/green]" if glasses.right_client and glasses.right_client.is_connected else "[red]Disconnected[/red]"
+        
+        # Add error counts in red if there are any
+        if left_errors > 0:
+            left_status += f" [red]({left_errors} errors)[/red]"
+        if right_errors > 0:
+            right_status += f" [red]({right_errors} errors)[/red]"
+            
         table.add_row("Left Glass", left_status)
         table.add_row("Right Glass", right_status)
         
-        # Physical state with last known state
+        # Physical state
         state = glasses.state_manager.physical_state
-        last_state = glasses.state_manager._last_known_state or "None"
-        state_colors = {
-            "Wearing": "green",
-            "Transitioning": "yellow",
-            "In the cradle": "blue",
-            "None": "white"
-        }
-        color = state_colors.get(last_state, "yellow")
-        table.add_row("State", f"[{color}]{last_state}[/{color}]")
+        state_info = StateDisplay.PHYSICAL_STATES.get(state, StateDisplay.PHYSICAL_STATES["UNKNOWN"])
+        color, label = state_info
+        table.add_row("State", f"[{color}]{label}[/{color}]")
         
         # Battery state
         battery = glasses.state_manager.battery_state
-        battery_colors = {
-            "Battery fully charged": "bright_green",
-            "Battery charging?": "yellow",
-            "Unknown": "yellow"
-        }
-        color = battery_colors.get(battery, "yellow")
-        table.add_row("Battery", f"[{color}]{battery}[/{color}]")
-        
+        if battery in StateEvent.BATTERY_STATES:
+            _, label = StateEvent.BATTERY_STATES[battery]
+            table.add_row("Battery", f"[{StateColors.INFO}]{label}[/{StateColors.INFO}]")
+        else:
+            table.add_row("Battery", f"[{StateColors.NEUTRAL}]Unknown[/{StateColors.NEUTRAL}]")
+            
         # Last heartbeat
-        last_heartbeat = getattr(glasses.state_manager, '_last_heartbeat', None)
+        last_heartbeat = glasses.state_manager.last_heartbeat
         if last_heartbeat:
             time_since = time.time() - last_heartbeat
             heartbeat_status = f"{time_since:.1f}s ago"
-            color = "green" if time_since < 5 else "yellow"
+            color = StateColors.SUCCESS if time_since < 5 else StateColors.WARNING
         else:
             heartbeat_status = "None"
-            color = "white"
+            color = StateColors.NEUTRAL
         table.add_row("Last Heartbeat", f"[{color}]{heartbeat_status}[/{color}]")
         
         # Last interaction
-        interaction = glasses.state_manager.last_interaction
-        interaction_time = getattr(glasses.state_manager, '_last_interaction_time', None)
-        if interaction and interaction != "None" and interaction_time:
-            time_since = time.time() - interaction_time
-            interaction_status = f"{interaction} ({time_since:.1f}s ago)"
-            table.add_row("Last Interaction", f"[cyan]{interaction_status}[/cyan]")
+        last_interaction = glasses.state_manager.last_interaction
+        if last_interaction:
+            table.add_row("Last Interaction", f"[{StateColors.INFO}]{last_interaction}[/{StateColors.INFO}]")
         else:
-            table.add_row("Last Interaction", "[white]None[/white]")
-        
-        # Last device state
-        last_device_state = glasses.state_manager._last_device_state
-        last_device_time = glasses.state_manager._last_device_state_time
-        if last_device_state and last_device_time:
-            time_since = time.time() - last_device_time
-            label = glasses.state_manager.last_device_state_label
-            device_status = f"{label} ({time_since:.1f}s ago)"
-            table.add_row("Last Device State", f"[yellow]{device_status}[/yellow]")
+            table.add_row("Last Interaction", f"[{StateColors.NEUTRAL}]None[/{StateColors.NEUTRAL}]")
+            
+        # Device state
+        device_state = glasses.state_manager.device_state
+        if device_state and device_state != "UNKNOWN":
+            table.add_row("Device State", f"[{StateColors.INFO}]{device_state}[/{StateColors.INFO}]")
         else:
-            table.add_row("Last Device State", "[white]None[/white]")
-        
-        # Silent mode status
-        silent_mode = glasses.state_manager.silent_mode
-        color = "yellow" if silent_mode else "green"
-        status = "On" if silent_mode else "Off"
-        table.add_row("Silent Mode", f"[{color}]{status}[/{color}]")
+            table.add_row("Device State", f"[{StateColors.NEUTRAL}]None[/{StateColors.NEUTRAL}]")
+            
+        # Silent mode
+        silent_mode = "On" if glasses.state_manager.silent_mode else "Off"
+        color = StateColors.WARNING if glasses.state_manager.silent_mode else StateColors.SUCCESS
+        table.add_row("Silent Mode", f"[{color}]{silent_mode}[/{color}]")
         
         return table
     except Exception as e:
@@ -243,11 +238,14 @@ async def main():
         glasses.logger.error(f"Dashboard error: {e}", exc_info=True)
     finally:
         # Ensure clean shutdown
-        glasses.logger.removeHandler(log_panel.handler)
-        glasses.state_manager.set_dashboard_mode(False)
-        glasses.state_manager.shutdown()
-        await glasses.disconnect()
-        console.print("[green]Dashboard exited[/green]")
+        try:
+            glasses.logger.removeHandler(log_panel.handler)
+            glasses.state_manager.set_dashboard_mode(False)
+            glasses.state_manager.shutdown()
+            await glasses.disconnect()
+            console.print("[green]Dashboard exited[/green]")
+        except Exception as e:
+            console.print(f"[red]Error during shutdown: {e}[/red]")
 
 if __name__ == "__main__":
     try:
