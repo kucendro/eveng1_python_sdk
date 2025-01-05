@@ -277,9 +277,7 @@ Default settings can be modified in `g1_config.json`:
 ## Roadmap & Planned Improvements
 
 ### Immediate Priority
-- [ ] expand interactions with other groups beyond 0xF5 (add a category column to the table and give it a bit more spacing), continue to exclude heartbeat though
-- [ ] colour interaction logs depending on if they are known - green (have a definition in constants) or not known - orange)
-- [ ] 
+- [ ] clean up the console logs for a new connection, many duplicates and logs with markup
 - [ ] Implement text sending functionality
 - [ ] Add comprehensive examples for text display and interaction
 - [ ] Document text positioning and formatting options

@@ -24,6 +24,7 @@ from utils.logger import setup_logger
 from utils.config import Config
 from utils.constants import UUIDS, COMMANDS, StateEvent, EventCategories
 from services.device import DeviceManager
+from services.display import DisplayService
 
 @dataclass
 class G1Config:
@@ -88,6 +89,7 @@ class G1Connector:
         # Then dependent services
         self.uart_service = UARTService(self)
         self.device_manager = DeviceManager(self)
+        self.display = DisplayService(self)  # Add display service
         
         # Finally managers
         self.command_manager = CommandManager(self)
