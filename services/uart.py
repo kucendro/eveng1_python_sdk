@@ -46,6 +46,9 @@ class UARTService:
     async def _handle_notification(self, side: str, data: bytes):
         """Process incoming UART notification"""
         try:
+            if self._shutting_down:  # Add early return if shutting down
+                return
+                
             if not data:
                 return
 
@@ -59,11 +62,13 @@ class UARTService:
             elif notification_type == EventCategories.HEARTBEAT:
                 await self.connector.health_monitor.process_heartbeat(side, time.time())
                 
-            # Forward to event service
-            await self.connector.event_service.process_notification(side, data)
-            
+            # Forward to event service if not shutting down
+            if not self._shutting_down:
+                await self.connector.event_service.process_notification(side, data)
+                
         except Exception as e:
-            self.logger.error(f"Error handling notification: {e}")
+            if not self._shutting_down:  # Only log errors if not shutting down
+                self.logger.error(f"Error handling notification: {e}")
 
     def add_notification_callback(self, callback: Callable):
         """Add callback for notifications"""
@@ -77,6 +82,7 @@ class UARTService:
 
     async def stop_notifications(self, client: BleakClient) -> None:
         """Stop notifications for UART service"""
+        self._shutting_down = True  # Set shutdown flag first
         try:
             await client.stop_notify(UUIDS.UART_RX)
             self.logger.debug("Stopped UART notifications")

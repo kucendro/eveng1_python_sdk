@@ -23,6 +23,7 @@ class EventService:
     def __init__(self, connector):
         self.connector = connector
         self.logger = connector.logger
+        self._shutting_down = False  # Add shutdown flag
         
         # Initialize handlers
         self._state_handlers = {
@@ -48,9 +49,18 @@ class EventService:
             self._raw_handlers[event_type][callback] = True
             self.logger.debug(f"Added raw event handler for type 0x{event_type:02x}: {callback}")
         
+    def unsubscribe_raw(self, event_type: int, callback):
+        """Unsubscribe from raw event data for specific event type"""
+        if event_type in self._raw_handlers and callback in self._raw_handlers[event_type]:
+            del self._raw_handlers[event_type][callback]
+            self.logger.debug(f"Removed raw event handler for type 0x{event_type:02x}: {callback}")
+            # Clean up empty event type dict
+            if not self._raw_handlers[event_type]:
+                del self._raw_handlers[event_type]
+        
     async def process_notification(self, side: str, data: bytes):
         """Process and distribute notifications"""
-        if not data:
+        if self._shutting_down or not data:  # Check shutdown flag
             return
             
         event_type = data[0]
@@ -94,3 +104,11 @@ class EventService:
                         self.logger.error(f"Error in event handler: {e}")
         except Exception as e:
             self.logger.error(f"Error dispatching event: {e}")
+
+    def shutdown(self):
+        """Initiate graceful shutdown"""
+        self._shutting_down = True
+        # Clear all handlers to prevent further callbacks
+        self._state_handlers = {key: {} for key in self._state_handlers}
+        self._connection_handlers = {}
+        self._raw_handlers = {}

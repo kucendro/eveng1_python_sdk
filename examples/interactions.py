@@ -147,9 +147,40 @@ async def main():
             label = f"Raw event 0x{event_code:02x}"
             logger.log_event(event_code, category, event_type, side, label)
     
-    # Register callbacks
+    async def handle_any_event(raw_data: bytes, side: str):
+        """Handle any event type from UART service"""
+        if not raw_data:
+            return
+        
+        category_byte = raw_data[0]
+        event_code = raw_data[1] if len(raw_data) > 1 else 0
+        
+        # Skip heartbeat events (0x25)
+        if category_byte == EventCategories.HEARTBEAT:
+            return
+            
+        # Map category to name
+        if category_byte == EventCategories.DASHBOARD:  # 0x22
+            category = "dashboard (0x22)"
+            if len(raw_data) >= 9:
+                event_type = "dashboard"
+                label = f"Unknown 0x{event_code:02x}"
+                logger.log_event(event_code, category, event_type, side, label)
+        elif category_byte == EventCategories.STATE:  # 0xf5
+            return  # Handled by state manager
+        else:
+            # Log any other category we haven't seen before
+            category = f"unknown (0x{category_byte:02x})"
+            event_type = "unknown"
+            label = f"Raw event 0x{event_code:02x}"
+            logger.log_event(event_code, category, event_type, side, label)
+    
+    # Register specific handlers for known categories
     glasses.event_service.subscribe_raw(EventCategories.DASHBOARD, handle_raw_event)
     glasses.state_manager.add_raw_state_callback(handle_state_change)
+    
+    # Add catch-all handler for unknown categories
+    glasses.uart_service.add_notification_callback(handle_any_event)
     
     try:
         while True:
@@ -157,8 +188,10 @@ async def main():
     except KeyboardInterrupt:
         print("\nExited by user")
     finally:
+        # Clean up all handlers
         glasses.state_manager.remove_raw_state_callback(handle_state_change)
         glasses.event_service.unsubscribe_raw(EventCategories.DASHBOARD, handle_raw_event)
+        glasses.uart_service.remove_notification_callback(handle_any_event)
         await glasses.disconnect()
 
 if __name__ == "__main__":
