@@ -131,6 +131,7 @@ class StateDisplay:
 class EventCategories:
     """Event categories for G1 glasses"""
     STATE_CHANGE = 0xf5
+    DASHBOARD = 0x22
     HEARTBEAT = 0x25
     RESPONSE = 0x03
     ERROR = 0x04
