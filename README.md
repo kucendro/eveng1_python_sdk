@@ -12,6 +12,7 @@ Requirements:
 pip install -r requirements.txt
 ```
 
+
 Required packages:
 - bleak>=0.21.1: Bluetooth LE communication
 - rich>=13.7.0: Enhanced console output
@@ -19,7 +20,7 @@ Required packages:
 
 ## Quick Start
 
-Basic connection example:
+Simple connection example:
 ```python
 from connector import G1Connector
 import asyncio
