@@ -68,21 +68,21 @@ Text display features:
 - Page-based text display
 - Screen status tracking
 
-Image display capabilities:
+Image display capabilities: (TODO)
 - 1-bit, 576x136 pixel BMP format
 - Packet-based transmission
 - CRC verification
 - Left/right glass synchronization
 
 ### Audio Features
-Microphone control:
+Microphone control: (TODO)
 - Right-side microphone activation
 - LC3 format audio streaming
 - 30-second maximum recording duration
 - Real-time audio data access
 
 ### Even AI Integration
-AI feature support:
+AI feature support: (TODO)
 - Start/stop AI recording
 - Manual/automatic modes
 - Result display handling
@@ -102,7 +102,7 @@ Individual feature implementations:
 - `audio.py`: Microphone control and audio processing (TODO)
 - `device.py`: Device interactions (TODO)
 - `display.py`: Text and image display management (TODO)
-- `events.py`: Listening and responding to G1 events (IN PROGRESS, move events from the connector files into this?)
+- `events.py`: Listening and responding to G1 events
 - `state.py`: State tracking and event management
 - `status.py`: 
 - `uart.py`: Low-level UART communication
