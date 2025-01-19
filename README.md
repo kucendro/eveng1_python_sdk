@@ -213,11 +213,19 @@ python -m examples.dashboard
 ### Display Features
 
 #### Text Display
-`send_text.py`  (TODO)
-Text display with multi-line support (TODO)
+`send_text.py`
+Text display with multi-line support
 
 ```bash
 python -m examples.send_text
+```
+
+#### PowerPoint Display (In progress)
+`ppt_teleprompter.py`
+Send speaker notes from an active PowerPoint presentation to the glasses
+
+```bash
+python -m examples.ppt_teleprompter
 ```
 
 #### Image Display
