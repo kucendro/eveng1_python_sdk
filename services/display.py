@@ -10,11 +10,11 @@ class DisplayService:
     """Handles text and image display"""
     
     # Constants from documentation
-    MAX_WIDTH_PIXELS = 488
-    FONT_SIZE = 21
+    #MAX_WIDTH_PIXELS = 488
+    #FONT_SIZE = 21
     LINES_PER_SCREEN = 5
-    CHARS_PER_LINE = MAX_WIDTH_PIXELS // FONT_SIZE  # Approximate, needs testing
-    MAX_TEXT_LENGTH = CHARS_PER_LINE * LINES_PER_SCREEN
+    CHARS_PER_LINE = 55  # Slightly reduced from 60 to give some margin for word wrapping
+    MAX_TEXT_LENGTH = CHARS_PER_LINE * LINES_PER_SCREEN  # About 275 characters
     
     def __init__(self, connector):
         self.connector = connector
@@ -22,37 +22,42 @@ class DisplayService:
         self._current_text = None  # Track currently displayed text
         
     def _split_text_into_chunks(self, text: str) -> List[str]:
-        """Split text into screen-sized chunks, breaking at word boundaries"""
+        """Split text into screen-sized chunks, preserving word boundaries"""
         chunks = []
-        words = text.split()
-        current_chunk = []
+        lines = []
+        current_line = []
         current_length = 0
         
+        words = text.split()
+        
         for word in words:
-            # Check if word itself is too long
-            if len(word) > self.CHARS_PER_LINE:
-                if current_chunk:
-                    chunks.append(' '.join(current_chunk))
-                    current_chunk = []
-                    current_length = 0
-                
-                # Split long word
-                for i in range(0, len(word), self.CHARS_PER_LINE):
-                    chunks.append(word[i:i + self.CHARS_PER_LINE])
-                continue
-            
-            # Check if adding this word exceeds the chunk size
-            if current_length + len(word) + 1 > self.MAX_TEXT_LENGTH:
-                chunks.append(' '.join(current_chunk))
-                current_chunk = [word]
-                current_length = len(word)
+            word_length = len(word)
+            # Check if adding this word would exceed line length
+            if current_length + word_length + (1 if current_line else 0) > self.CHARS_PER_LINE:
+                # Save current line and start new one
+                if current_line:
+                    lines.append(' '.join(current_line))
+                current_line = [word]
+                current_length = word_length
             else:
-                current_chunk.append(word)
-                current_length += len(word) + 1
+                current_line.append(word)
+                current_length += word_length + (1 if current_line else 0)
+        
+        # Add last line if exists
+        if current_line:
+            lines.append(' '.join(current_line))
+        
+        # Combine lines into chunks that fit on screen
+        current_chunk = []
+        for line in lines:
+            if len(current_chunk) >= self.LINES_PER_SCREEN:
+                chunks.append('\n'.join(current_chunk))
+                current_chunk = []
+            current_chunk.append(line)
         
         if current_chunk:
-            chunks.append(' '.join(current_chunk))
-            
+            chunks.append('\n'.join(current_chunk))
+        
         return chunks
 
     def validate_text(self, text: str) -> bool:
@@ -63,15 +68,20 @@ class DisplayService:
 
     async def send_text_sequential(self, text: str, hold_time: Optional[int] = None, show_exit: bool = True):
         """Send text to both glasses in sequence with acknowledgment"""
-        # Check connection status first
-        if not self.connector.left_client or not self.connector.right_client:
-            self.logger.error("Glasses not connected. Please connect first.")
-            return False
-        
+        # Keep existing connection checks
         if not self.connector.left_client.is_connected or not self.connector.right_client.is_connected:
             self.logger.error("One or both glasses disconnected. Please reconnect.")
             return False
 
+        # Quick validation
+        if not text:
+            raise ValueError("Text cannot be empty")
+            
+        # Only chunk if text exceeds display limits
+        chunks = self._split_text_into_chunks(text)
+        text_to_send = chunks[0]  # Get first chunk with line breaks
+            
+        # Prepare command once for both glasses
         command = bytearray([
             0x4E,       # Text command
             0x00,       # Sequence number
@@ -82,34 +92,26 @@ class DisplayService:
             0x00,       # Current page
             0x01,       # Max pages
         ])
-        
-        command.extend(text.encode('utf-8'))
-        self._current_text = text
+        command.extend(text_to_send.encode('utf-8'))
         
         try:
-            # Send to left and wait for acknowledgment
-            self.logger.info(f"Sending to left glass: '{text}'")
-            if not await self.connector.uart_service.send_command_with_retry(self.connector.left_client, command):
-                self.logger.error("Failed to send to left glass")
+            # Send to both glasses simultaneously
+            tasks = [
+                self.connector.uart_service.send_command_with_retry(self.connector.left_client, command),
+                self.connector.uart_service.send_command_with_retry(self.connector.right_client, command)
+            ]
+            results = await asyncio.gather(*tasks)
+            
+            if all(results):
+                if hold_time:
+                    await asyncio.sleep(hold_time)
+                    if show_exit:
+                        await self.show_exit_message()
+                return True
+            else:
+                self.logger.error("Failed to send to one or both glasses")
                 return False
-            
-            await asyncio.sleep(1)  # Wait for acknowledgment
-            
-            # Send to right
-            self.logger.info("Left glass acknowledged, sending to right...")
-            if not await self.connector.uart_service.send_command_with_retry(self.connector.right_client, command):
-                self.logger.error("Failed to send to right glass")
-                return False
-            
-            # Hold for specified time if provided
-            if hold_time is not None:
-                self.logger.info(f"Holding text for {hold_time} seconds...")
-                await asyncio.sleep(hold_time)
-                if show_exit:  # Only show exit if requested
-                    await self.show_exit_message()
-            
-            return True
-            
+                
         except Exception as e:
             self.logger.error(f"Error sending text: {e}")
             return False

@@ -7,39 +7,6 @@ import sys
 from connector import G1Connector
 from utils.logger import setup_logger
 
-# Configuration
-SEQUENCE_CHUNK_TIME = 1.0  # Time in seconds to display each chunk of text
-MAX_CHARS_PER_CHUNK = 200  # see what fits best
-
-def split_into_chunks(text, max_chars):
-    """Split text into chunks of maximum length while preserving words"""
-    if not text:
-        return []
-    
-    # Split into words
-    words = text.split()
-    chunks = []
-    current_chunk = []
-    current_length = 0
-    
-    for word in words:
-        # Check if adding this word would exceed the limit
-        word_length = len(word) + 1  # +1 for the space
-        if current_length + word_length > max_chars and current_chunk:
-            # Save current chunk and start a new one
-            chunks.append(' '.join(current_chunk))
-            current_chunk = [word]
-            current_length = len(word)
-        else:
-            # Add word to current chunk
-            current_chunk.append(word)
-            current_length += word_length
-    
-    # Add the last chunk if there is one
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
-    
-    return chunks
 
 print("Script starting...")
 
@@ -106,33 +73,22 @@ async def main():
                     
                     if notes_text and notes_text != current_notes:
                         current_notes = notes_text
-                        print(f"\n=== Notes for Slide {slide_number} ===")
-                        print(notes_text)
-                        
-                        # Split into sequence if needed
-                        chunks = split_into_chunks(notes_text, MAX_CHARS_PER_CHUNK)
-                        if len(chunks) > 1:
-                            print(f"\nSplit into {len(chunks)} parts:")
-                            for i, chunk in enumerate(chunks, 1):
-                                print(f"\nPart {i}/{len(chunks)} ({SEQUENCE_CHUNK_TIME}s):")
-                                print(chunk)
-                                await glasses.display.display_text(chunk)
-                                await asyncio.sleep(SEQUENCE_CHUNK_TIME)
-                        else:
-                            await glasses.display.display_text(notes_text)
+                        logger.debug(f"Notes for Slide {slide_number}")
+                        # Let display service handle text formatting and chunking
+                        await glasses.display.display_text(notes_text)
                             
             except Exception as e:
-                print(f"Error in monitoring loop: {e}")
+                logger.error(f"Error in monitoring loop: {e}")
                 
-            await asyncio.sleep(0.1) # lower is more responsive but more cpu usage
+            await asyncio.sleep(0.1)
             
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
     finally:
-        print("Stopping monitor...")
+        logger.info("Stopping monitor...")
         await glasses.display.show_exit_message()
         await glasses.disconnect()
-        print("Monitor stopped")
+        logger.info("Monitor stopped")
 
 if __name__ == "__main__":
     try:
