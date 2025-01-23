@@ -8,8 +8,8 @@ from connector import G1Connector
 from utils.logger import setup_logger
 
 # Configuration
-SEQUENCE_CHUNK_TIME = 3.0  # Time in seconds to display each chunk of text
-MAX_CHARS_PER_CHUNK = 200  # Reduced from 150 to avoid display re-splitting
+SEQUENCE_CHUNK_TIME = 1.0  # Time in seconds to display each chunk of text
+MAX_CHARS_PER_CHUNK = 200  # see what fits best
 
 def split_into_chunks(text, max_chars):
     """Split text into chunks of maximum length while preserving words"""
@@ -65,6 +65,7 @@ async def main():
         # Track current state
         current_slide = None
         current_notes = None
+        notes_cache = {}  # Add cache for slide notes
         
         while True:
             try:
@@ -84,19 +85,25 @@ async def main():
                 if slide_number != current_slide:
                     current_slide = slide_number
                     
-                    # Get notes using the working method
-                    notes_text = ""
-                    if current_slide_obj.HasNotesPage:
-                        notes_page = current_slide_obj.NotesPage
-                        # Get text from all shapes in notes page
-                        for shape in notes_page.Shapes:
-                            if shape.HasTextFrame:
-                                text = shape.TextFrame.TextRange.Text.strip()
-                                # Filter out standalone slide numbers
-                                if text and text != str(slide_number):
-                                    notes_text += text + "\n"
+                    # Check cache first
+                    if slide_number in notes_cache:
+                        notes_text = notes_cache[slide_number]
+                    else:
+                        # Get notes using the working method
+                        notes_text = ""
+                        if current_slide_obj.HasNotesPage:
+                            notes_page = current_slide_obj.NotesPage
+                            # Get text from all shapes in notes page
+                            for shape in notes_page.Shapes:
+                                if shape.HasTextFrame:
+                                    text = shape.TextFrame.TextRange.Text.strip()
+                                    # Filter out standalone slide numbers
+                                    if text and text != str(slide_number):
+                                        notes_text += text + "\n"
                     
-                    notes_text = notes_text.strip()
+                        notes_text = notes_text.strip()
+                        notes_cache[slide_number] = notes_text  # Cache the result
+                    
                     if notes_text and notes_text != current_notes:
                         current_notes = notes_text
                         print(f"\n=== Notes for Slide {slide_number} ===")
@@ -117,7 +124,7 @@ async def main():
             except Exception as e:
                 print(f"Error in monitoring loop: {e}")
                 
-            await asyncio.sleep(0.5)  # Check every 500ms
+            await asyncio.sleep(0.1) # lower is more responsive but more cpu usage
             
     except Exception as e:
         print(f"Error: {e}")
