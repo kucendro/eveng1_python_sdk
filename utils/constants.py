@@ -36,7 +36,6 @@ class StateEvent:
     # Device States
     DEVICE_STATES: Dict[int, Tuple[str, str]] = {
         0x0a: ("DEVICE_UNKNOWN_0a", "Device unknown 0a"), # this one started appearing after the firmware update on 2025-01-02 (left and right)
-        0x0f: ("DEVICE_UNKNOWN_0F", "Device unknown 0f"), # seen at regular intervals while device was connect out and in cradle over 8 hours
         0x11: ("CONNECTED", "Successfully connected"), # assumed because its usualy at the start of the connection
         0x12: ("DEVICE_UNKNOWN_12", "Device unknown 12"), # seen, unclear purpose
         0x14: ("DEVICE_UNKNOWN_15", "Device unknown 14"), # seen, unclear purpose
@@ -45,8 +44,9 @@ class StateEvent:
 
     # Battery States - (code, system_name, display_label)
     BATTERY_STATES: Dict[int, Tuple[str, str]] = {
-        0x09: ("BATTERY_CHARGED", "Battery fully charged (and in the cradle?)"),
+        0x09: ("GLASSES_CHARGED", "Glasses fully charged"),
         0x0e: ("CABLE_CHARGING", "Cradle charging cable state changed"),
+        0x0f: ("CRADLE_CHARGED", "Cradle fully charged"),
     }
     
     # Interactions

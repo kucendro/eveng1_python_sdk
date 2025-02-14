@@ -96,5 +96,13 @@ def setup_logger(config: Optional[Config] = None) -> logging.Logger:
     return logger
 
 def user_guidance(logger: logging.Logger, message: str):
-    """Log user guidance messages"""
-    logger.user(message) 
+    """Log user guidance messages without duplication"""
+    # Only log once, with markup for console and plain for file
+    logger.info(message, extra={"markup": True})  # Console gets formatted
+    
+    # If we have file logging enabled, log without markup
+    if any(isinstance(h, logging.FileHandler) for h in logger.handlers):
+        plain_msg = message.replace("[yellow]", "").replace("[/yellow]", "")
+        plain_msg = plain_msg.replace("[green]", "").replace("[/green]", "")
+        plain_msg = plain_msg.replace("[red]", "").replace("[/red]", "")
+        logger.debug(plain_msg, extra={"markup": False})  # File gets plain text 
