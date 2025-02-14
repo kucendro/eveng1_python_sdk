@@ -62,8 +62,10 @@ class BLEManager:
                 user_guidance(self.logger, "   - First close the left temple/arm")
                 user_guidance(self.logger, "   - Then close the right temple/arm")
                 user_guidance(self.logger, "   - Place glasses in cradle with both arms closed")
-                user_guidance(self.logger, "2. Bluetooth is enabled on your computer")
-                user_guidance(self.logger, "3. Glasses have not been added to Windows Bluetooth manager")
+                user_guidance(self.logger, "2. Bluetooth is enabled on your computer (sometimes wifi on your computer can interfere with bluetooth)")
+                user_guidance(self.logger, "3. Bluetooth is disabled on other nearby devices that have paired with the glasses")
+                user_guidance(self.logger, "4. Glasses have not been added to Windows Bluetooth manager (remove if present)")
+                user_guidance(self.logger, "5. If still not working, connect with the offical app and restart the glasses, then try again.")
                 return False
 
             self.connector.config.save()

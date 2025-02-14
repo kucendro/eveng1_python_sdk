@@ -28,8 +28,9 @@ class StateEvent:
     PHYSICAL_STATES: Dict[int, Tuple[str, str, str]] = {
         0x06: ("WEARING", "Wearing", StateColors.SUCCESS),
         0x07: ("TRANSITIONING", "Transitioning", StateColors.WARNING),
-        0x08: ("CRADLE", "In the cradle", StateColors.INFO),
+        0x08: ("CRADLE", "Cradle open", StateColors.INFO),
         0x09: ("CRADLE_FULL", "Charged in cradle", StateColors.SUCCESS),
+        0x0b: ("CRADLE_CLOSED", "Cradle closed", StateColors.INFO),
     }
     
     # Device States
@@ -45,7 +46,7 @@ class StateEvent:
     # Battery States - (code, system_name, display_label)
     BATTERY_STATES: Dict[int, Tuple[str, str]] = {
         0x09: ("BATTERY_CHARGED", "Battery fully charged (and in the cradle?)"),
-        0x0e: ("BATTERY_CHARGING", "Battery charging?"),
+        0x0e: ("CABLE_CHARGING", "Cradle charging cable state changed"),
     }
     
     # Interactions
