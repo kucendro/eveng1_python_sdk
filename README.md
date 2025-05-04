@@ -68,6 +68,8 @@ Text display features:
 - Configurable font sizes
 - Page-based text display
 - Screen status tracking
+- Brightness level adjustment
+- Auto brightness on/off
 
 Image display capabilities: (TODO)
 - 1-bit, 576x136 pixel BMP format

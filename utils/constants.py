@@ -103,6 +103,7 @@ class COMMANDS:
     SILENT_MODE_OFF = 0x05 # 3 taps
     AI_ENABLE = 0x17 #long press left
     HEARTBEAT_CMD = bytes([0x25, 0x06, 0x00, 0x01, 0x04, 0x01])
+    BRIGHTNESS = 0x01
 
 class StateDisplay:
     """Display information derived from StateEvent definitions"""

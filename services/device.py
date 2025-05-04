@@ -50,6 +50,29 @@ class DeviceManager:
             self.logger.error(f"Error setting silent mode: {e}")
             return False
 
+    async def set_brightness(self, level: int, auto: bool = False) -> bool:
+        """Set the brightness level (0-41) for both glasses. If auto is True, enable auto brightness."""
+        try:
+            if not 0 <= level <= 41:
+                self.logger.error(f"Brightness level {level} out of range (0-41)")
+                return False
+            auto_byte = 0x01 if auto else 0x00
+            command = bytes([COMMANDS.BRIGHTNESS, level, auto_byte])
+            success = True
+            for client in [self.connector.left_client, self.connector.right_client]:
+                if client and client.is_connected:
+                    await self.connector.command_manager.send_command(
+                        client,
+                        command,
+                        expect_response=False
+                    )
+            mode = 'AUTO' if auto else 'MANUAL'
+            self.logger.info(f"Brightness set to {level} ({mode})")
+            return success
+        except Exception as e:
+            self.logger.error(f"Error setting brightness: {e}")
+            return False
+
     @property
     def battery_level(self) -> dict:
         """Get current battery levels"""
