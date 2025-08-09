@@ -1,6 +1,7 @@
 """
 Pairing and device management for G1 glasses
 """
+import platform
 import asyncio
 from typing import Optional, Dict
 from bleak import BleakScanner, BleakClient
@@ -15,22 +16,7 @@ class PairingManager:
         self._pairing_lock = asyncio.Lock()
         self._discovery_cache = {}
         self._last_scan = 0
-
-    async def _verify_windows_pairing(self, address: str) -> bool:
-        """Verify device is paired in Windows"""
-        try:
-            # Use BleakScanner to get paired devices
-            devices = await BleakScanner.discover(timeout=5.0)
-            for device in devices:
-                if device.address.lower() == address.lower():
-                    # Check if device is paired using Bleak's internal API
-                    if hasattr(device, '_device_info') and hasattr(device._device_info, 'pairing'):
-                        return device._device_info.pairing.is_paired
-                    return True  # Fallback if we can't check pairing status
-            return False
-        except Exception as e:
-            self.logger.error(f"Error verifying Windows pairing: {e}")
-            return False
+        self._is_macos = platform.system() == "Darwin"
 
     async def verify_pairing(self) -> bool:
         """Verify existing pairing is valid"""
@@ -41,41 +27,23 @@ class PairingManager:
                 self.logger.debug("No saved addresses found")
                 return False
 
-            # First verification
             for side, addr in [("left", self.connector.config.left_address),
                              ("right", self.connector.config.right_address)]:
                 try:
                     client = BleakClient(addr)
-                    await client.connect(timeout=5.0)
+                    await client.connect(timeout=10.0)
                     await client.disconnect()
-                    self.logger.debug(f"Successfully verified {side} glass pairing")
+                    self.logger.debug(f"Successfully verified {side} glass connection")
                 except Exception as e:
-                    self.logger.warning(f"Could not verify {side} glass pairing: {e}")
+                    self.logger.warning(f"Could not verify {side} glass connection: {e}")
+                    if self._is_macos:
+                        self.logger.info(f"Please pair {side} glass manually in System Preferences > Bluetooth")
                     return False
 
-            # If not paired, do first-time pairing
+            # Mark as paired after successful connection test
             if not self.connector.config.left_paired or not self.connector.config.right_paired:
-                self.logger.info("\nFirst time connection detected!")
-                self.logger.info("The glasses will be paired with your device. This only happens once.")
-                self.logger.info("Please wait while the pairing is completed...")
-
-                # Second verification with pairing
-                for side, addr in [("left", self.connector.config.left_address),
-                                 ("right", self.connector.config.right_address)]:
-                    try:
-                        client = BleakClient(addr)
-                        await client.connect(timeout=5.0)
-                        await client.pair()
-                        await client.disconnect()
-                        self.logger.debug(f"Successfully verified {side} glass pairing")
-                        if side == "left":
-                            self.connector.config.left_paired = True
-                        else:
-                            self.connector.config.right_paired = True
-                    except Exception as e:
-                        self.logger.warning(f"Could not verify {side} glass pairing: {e}")
-                        return False
-
+                self.connector.config.left_paired = True
+                self.connector.config.right_paired = True
                 self.connector.config.save()
                 self.logger.info("Pairing verification successful")
 
@@ -87,6 +55,66 @@ class PairingManager:
 
     async def _attempt_pairing(self, client: BleakClient, glass_name: str, max_attempts: int = 3) -> bool:
         """Attempt to pair with a glass"""
+        try:
+            is_left = glass_name == "Left glass"
+            address = client.address
+            side = "left" if is_left else "right"
+            
+            if self._is_macos:
+                # On macOS, we can't programmatically pair - just try to connect
+                self.logger.info(f"Attempting to connect to {glass_name} (address: {address})")
+                self.logger.info("If connection fails, please pair manually in System Preferences > Bluetooth")
+                
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        if attempt > 1:
+                            await asyncio.sleep(2)
+                        
+                        client = BleakClient(address)
+                        await client.connect(timeout=20.0)
+                        
+                        if client.is_connected:
+                            self.logger.info(f"Successfully connected to {glass_name}")
+                            
+                            # Update config
+                            if is_left:
+                                self.connector.config.left_paired = True
+                            else:
+                                self.connector.config.right_paired = True
+                            self.connector.config.save()
+                            
+                            await client.disconnect()
+                            await asyncio.sleep(1)
+                            
+                            self.connector.console.print(f"[green]{glass_name} connected successfully![/green]")
+                            
+                            if self.connector.event_service:
+                                await self.connector.event_service._handle_pairing_complete(side, True)
+                                
+                            return True
+                            
+                    except Exception as e:
+                        self.logger.error(f"Connection attempt {attempt} failed: {e}")
+                        if "not paired" in str(e).lower() or "not connected" in str(e).lower():
+                            self.logger.warning(f"Device may need manual pairing. Please go to System Preferences > Bluetooth and pair {glass_name}")
+                        if attempt < max_attempts:
+                            await asyncio.sleep(2)
+                        continue
+            else:
+                # Windows pairing logic (original code)
+                return await self._attempt_windows_pairing(client, glass_name, max_attempts)
+            
+            if self.connector.event_service:
+                await self.connector.event_service._handle_pairing_complete(side, False)
+                
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"Pairing attempt failed: {e}")
+            return False
+
+    async def _attempt_windows_pairing(self, client: BleakClient, glass_name: str, max_attempts: int = 3) -> bool:
+        """Windows-specific pairing logic"""
         try:
             is_left = glass_name == "Left glass"
             address = client.address
@@ -248,4 +276,4 @@ class PairingManager:
             self.logger.info("Unpaired from glasses")
             
         except Exception as e:
-            self.logger.error(f"Error unpairing: {e}") 
+            self.logger.error(f"Error unpairing: {e}")
